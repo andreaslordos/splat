@@ -5,8 +5,13 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING
 
-from fastapi import APIRouter, Request, Response
-from fastapi.responses import JSONResponse
+try:
+    from fastapi import APIRouter, Request
+    from fastapi.responses import JSONResponse
+
+    _FASTAPI_AVAILABLE = True
+except ImportError:
+    _FASTAPI_AVAILABLE = False
 
 from splat.webhooks.vercel import parse_logs, verify_signature
 
@@ -28,10 +33,19 @@ def create_webhook_router(splat: Splat) -> APIRouter:
 
     Returns:
         A FastAPI APIRouter with a POST endpoint at the configured path.
+
+    Raises:
+        ImportError: If FastAPI is not installed.
     """
+    if not _FASTAPI_AVAILABLE:
+        raise ImportError(
+            "FastAPI is required for the webhook router. "
+            "Install it with: pip install fastapi"
+        )
+
     router = APIRouter()
 
-    async def webhook_handler(request: Request) -> Response:
+    async def webhook_handler(request: Request) -> JSONResponse:
         global _warned_no_secret
 
         body = await request.body()

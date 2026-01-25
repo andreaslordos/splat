@@ -19,13 +19,6 @@ Automatic GitHub issue creation on application crashes with optional Claude Code
 pip install py-splat
 ```
 
-With framework support:
-```bash
-pip install py-splat[flask]    # Flask
-pip install py-splat[fastapi]  # FastAPI
-pip install py-splat[cli]      # CLI tools
-```
-
 ## Quick Start
 
 ### Basic Usage

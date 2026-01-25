@@ -31,7 +31,13 @@ class SplatMiddleware:
             await self.app(scope, receive, send)
             return
 
-        from starlette.requests import Request
+        try:
+            from starlette.requests import Request
+        except ImportError:
+            raise ImportError(
+                "FastAPI/Starlette is required for SplatMiddleware. "
+                "Install it with: pip install fastapi"
+            )
 
         request = Request(scope, receive, send)
 
