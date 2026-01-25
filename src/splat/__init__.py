@@ -2,5 +2,5 @@
 
 from splat.core.reporter import Splat
 
-__version__ = "0.1.7"
+__version__ = "0.1.8"
 __all__ = ["Splat", "__version__"]

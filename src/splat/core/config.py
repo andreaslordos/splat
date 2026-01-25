@@ -27,6 +27,8 @@ class SplatConfig:
     vercel_secret: str | None = None
     vercel_webhook_path: str = "/splat/logs"
     vercel_log_ttl: int = 60
+    # Debug mode
+    debug: bool = False
 
 
 def _find_pyproject() -> Path | None:
@@ -68,6 +70,9 @@ def _load_from_env() -> dict[str, Any]:
     if vercel_log_ttl := os.environ.get("SPLAT_VERCEL_LOG_TTL"):
         config["vercel_log_ttl"] = int(vercel_log_ttl)
 
+    if debug := os.environ.get("SPLAT_DEBUG"):
+        config["debug"] = debug.lower() in ("true", "1", "yes")
+
     return config
 
 
@@ -98,6 +103,7 @@ def load_config(
     vercel_secret: str | None = None,
     vercel_webhook_path: str | None = None,
     vercel_log_ttl: int | None = None,
+    debug: bool | None = None,
 ) -> SplatConfig:
     """
     Load configuration with precedence: programmatic > toml > env > defaults.
@@ -136,6 +142,8 @@ def load_config(
         config.vercel_webhook_path = env_config["vercel_webhook_path"]
     if "vercel_log_ttl" in env_config:
         config.vercel_log_ttl = env_config["vercel_log_ttl"]
+    if "debug" in env_config:
+        config.debug = env_config["debug"]
 
     # Layer 2: pyproject.toml
     if pyproject := _find_pyproject():
@@ -156,6 +164,8 @@ def load_config(
             config.vercel_webhook_path = toml_config["vercel_webhook_path"]
         if "vercel_log_ttl" in toml_config:
             config.vercel_log_ttl = toml_config["vercel_log_ttl"]
+        if "debug" in toml_config:
+            config.debug = toml_config["debug"]
 
     # Layer 3: Programmatic overrides (highest priority)
     if repo is not None:
@@ -174,5 +184,7 @@ def load_config(
         config.vercel_webhook_path = vercel_webhook_path
     if vercel_log_ttl is not None:
         config.vercel_log_ttl = vercel_log_ttl
+    if debug is not None:
+        config.debug = debug
 
     return config

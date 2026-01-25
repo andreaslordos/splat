@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Any, Awaitable, Callable, MutableMapping
 
 from splat.core.reporter import Splat
+
+logger = logging.getLogger(__name__)
 
 
 class SplatMiddleware:
@@ -59,6 +62,12 @@ class SplatMiddleware:
             response = await call_next(request)
             return response
         except Exception as e:
+            if self.splat.config.debug:
+                logger.warning(
+                    f"[SPLAT DEBUG] FastAPI middleware caught: "
+                    f"{type(e).__name__}: {e}"
+                )
+
             context = {
                 "method": request.method,
                 "path": request.url.path,
@@ -69,7 +78,20 @@ class SplatMiddleware:
                 ),
             }
             vercel_request_id = request.headers.get("x-vercel-id")
-            await self.splat.report(
-                e, context=context, vercel_request_id=vercel_request_id
-            )
+
+            if self.splat.config.debug:
+                logger.warning(
+                    f"[SPLAT DEBUG] FastAPI context: {context}, "
+                    f"vercel_request_id={vercel_request_id}"
+                )
+
+            try:
+                await self.splat.report(
+                    e, context=context, vercel_request_id=vercel_request_id
+                )
+            except Exception as report_error:
+                if self.splat.config.debug:
+                    logger.warning(
+                        f"[SPLAT DEBUG] FastAPI report() raised: {report_error}"
+                    )
             raise

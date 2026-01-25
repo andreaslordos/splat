@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from typing import Any, Callable
 
 from splat.core.reporter import Splat
+
+logger = logging.getLogger(__name__)
 
 _splat_instance: Splat | None = None
 
@@ -41,6 +44,12 @@ def create_error_handler(
         if instance is None:
             raise error
 
+        if instance.config.debug:
+            logger.warning(
+                f"[SPLAT DEBUG] Flask error handler caught: "
+                f"{type(error).__name__}: {error}"
+            )
+
         context: dict[str, Any] = {}
         vercel_request_id: str | None = None
         try:
@@ -56,9 +65,21 @@ def create_error_handler(
         except (ImportError, RuntimeError):
             pass
 
-        _run_async(
-            instance.report(error, context=context, vercel_request_id=vercel_request_id)
-        )
+        if instance.config.debug:
+            logger.warning(
+                f"[SPLAT DEBUG] Flask context: {context}, "
+                f"vercel_request_id={vercel_request_id}"
+            )
+
+        try:
+            _run_async(
+                instance.report(
+                    error, context=context, vercel_request_id=vercel_request_id
+                )
+            )
+        except Exception as report_error:
+            if instance.config.debug:
+                logger.warning(f"[SPLAT DEBUG] Flask report() raised: {report_error}")
         raise error
 
     return handler
