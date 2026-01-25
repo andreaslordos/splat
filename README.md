@@ -81,6 +81,9 @@ app.add_middleware(SplatMiddleware, repo="owner/repo", token="ghp_...")
 | `SPLAT_ENABLED` | Enable/disable reporting | `true` |
 | `SPLAT_LOG_BUFFER_SIZE` | Log buffer capacity | `200` |
 | `SPLAT_LABELS` | Issue labels (comma-separated) | `bug,splat` |
+| `SPLAT_VERCEL_SECRET` | Vercel webhook verification secret | (optional) |
+| `SPLAT_VERCEL_WEBHOOK_PATH` | Vercel webhook endpoint path | `/splat/logs` |
+| `SPLAT_VERCEL_LOG_TTL` | Seconds to keep Vercel logs in memory | `60` |
 
 ### pyproject.toml
 
@@ -123,6 +126,62 @@ Splat can automatically create PRs to fix reported bugs using Claude Code:
    ```
 
 When an error is reported, Claude Code will analyze the issue, write a failing test, implement a fix, and open a PR.
+
+## Vercel Log Integration
+
+Splat can capture Vercel runtime logs via Log Drain webhooks, providing precise logs for each failed request.
+
+### Setup
+
+1. **Configure your app:**
+
+   Flask (webhook auto-registered):
+   ```python
+   from flask import Flask
+   from splat.middleware.flask import SplatFlask
+
+   app = Flask(__name__)
+   splat = SplatFlask()
+   splat.init_app(app, repo="owner/repo", token="ghp_...")
+   # Automatically registers /splat/logs webhook
+   ```
+
+   FastAPI:
+   ```python
+   from fastapi import FastAPI
+   from splat.middleware.fastapi import SplatMiddleware
+   from splat.webhooks.fastapi import create_webhook_router
+   from splat import Splat
+
+   app = FastAPI()
+   splat = Splat(repo="owner/repo", token="ghp_...")
+   app.add_middleware(SplatMiddleware, repo="owner/repo", token="ghp_...")
+   app.include_router(create_webhook_router(splat))
+   ```
+
+2. **Add Log Drain in Vercel:**
+   - Go to your project's Settings → Log Drains
+   - Create a new Log Drain:
+     - **Delivery format:** JSON
+     - **Endpoint:** `https://your-app.vercel.app/splat/logs`
+     - **Sources:** Lambda, Edge (runtime logs)
+
+3. **(Recommended) Add verification secret:**
+   ```bash
+   # Generate a secret
+   export SPLAT_VERCEL_SECRET=$(openssl rand -hex 32)
+   # Add to your environment variables and Vercel Log Drain config
+   ```
+
+### How It Works
+
+1. Vercel pushes runtime logs to your `/splat/logs` endpoint
+2. Splat stores logs keyed by request ID (from `x-vercel-id` header)
+3. When an error occurs, middleware captures the request ID
+4. `splat.report()` fetches logs for that specific request
+5. GitHub issue includes the exact logs for the failed request
+
+Logs automatically expire after 60 seconds (configurable via `SPLAT_VERCEL_LOG_TTL`).
 
 ## Issue Format
 
