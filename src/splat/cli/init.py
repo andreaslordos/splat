@@ -431,40 +431,9 @@ def set_github_secret(repo: str, name: str, value: str) -> bool:
 
 def get_vercel_environments() -> list[str]:
     """Get list of available Vercel environments for the linked project."""
-    # Default environments that Vercel always has
-    default_envs = ["production", "preview", "development"]
-
-    # Try to get custom environments via vercel env ls
-    success, output = run_command(["vercel", "env", "ls"])
-    if not success:
-        return default_envs
-
-    # Parse output for environment names
-    # vercel env ls output includes environment names in the table
-    found_envs = set()
-    for line in output.splitlines():
-        line_lower = line.lower()
-        for env in default_envs:
-            if env in line_lower:
-                found_envs.add(env)
-        # Check for custom environment patterns (lines that look like env names)
-        # Custom envs appear in the "Environment" column
-        if "custom" in line_lower or line.strip() and not line.startswith(" "):
-            # Try to extract custom environment name
-            parts = line.split()
-            for part in parts:
-                part_clean = part.strip().lower()
-                if (
-                    part_clean
-                    and part_clean not in default_envs
-                    and len(part_clean) < 30
-                ):
-                    # Could be a custom environment name
-                    if part_clean.isalnum() or "-" in part_clean or "_" in part_clean:
-                        found_envs.add(part)
-
-    # Always include defaults, they're always available
-    return default_envs + [e for e in found_envs if e not in default_envs]
+    # Vercel has 3 standard environments - custom environments are a paid feature
+    # that most users don't have, so we just return the defaults
+    return ["production", "preview", "development"]
 
 
 def add_vercel_env(name: str, value: str, environments: list[str]) -> tuple[bool, str]:
