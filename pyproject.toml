@@ -4,8 +4,8 @@ build-backend = "hatchling.build"
 
 [project]
 name = "py-splat"
-version = "0.1.0"
-description = "Automatic GitHub issue creation + PR fix on runtime erorrs"
+version = "0.1.1"
+description = "Automatic GitHub issue creation + PR fix on runtime errors"
 readme = "README.md"
 requires-python = ">=3.9"
 license = "MIT"
@@ -55,7 +55,6 @@ Issues = "https://github.com/andreaslordos/splat/issues"
 cli = ["click>=8.0.0", "questionary>=2.0.0"]
 flask = ["flask>=2.0.0"]
 fastapi = ["fastapi>=0.100.0"]
-django = ["django>=4.0.0"]
 dev = [
     "pytest>=7.0.0",
     "pytest-asyncio>=0.21.0",
@@ -67,7 +66,7 @@ dev = [
     "pre-commit>=3.0.0",
     "types-PyYAML",
 ]
-all = ["splat[cli,flask,fastapi,django,dev]"]
+all = ["splat[cli,flask,fastapi,dev]"]
 
 [project.scripts]
 splat = "splat.cli.main:cli"

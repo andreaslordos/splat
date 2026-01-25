@@ -4,6 +4,7 @@ from unittest.mock import MagicMock, patch
 
 from click.testing import CliRunner
 
+from splat import __version__
 from splat.cli.main import cli
 
 
@@ -14,7 +15,7 @@ class TestCli:
         runner = CliRunner()
         result = runner.invoke(cli, ["--version"])
         assert result.exit_code == 0
-        assert "0.1.0" in result.output
+        assert __version__ in result.output
 
     def test_cli_has_init_command(self) -> None:
         runner = CliRunner()

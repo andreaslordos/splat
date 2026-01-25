@@ -1,5 +1,9 @@
 # Splat
 
+[![PyPI version](https://img.shields.io/pypi/v/py-splat.svg)](https://pypi.org/project/py-splat/)
+[![Python versions](https://img.shields.io/pypi/pyversions/py-splat.svg)](https://pypi.org/project/py-splat/)
+[![License](https://img.shields.io/pypi/l/py-splat.svg)](https://github.com/andreaslordos/splat/blob/main/LICENSE)
+
 Automatic GitHub issue creation on application crashes with optional Claude Code auto-fix.
 
 ## Features
@@ -12,14 +16,14 @@ Automatic GitHub issue creation on application crashes with optional Claude Code
 ## Installation
 
 ```bash
-pip install splat
+pip install py-splat
 ```
 
 With framework support:
 ```bash
-pip install splat[flask]    # Flask
-pip install splat[fastapi]  # FastAPI
-pip install splat[cli]      # CLI tools
+pip install py-splat[flask]    # Flask
+pip install py-splat[fastapi]  # FastAPI
+pip install py-splat[cli]      # CLI tools
 ```
 
 ## Quick Start
@@ -34,19 +38,22 @@ splat = Splat(repo="owner/repo", token="ghp_...")
 try:
     do_something()
 except Exception as e:
-    await splat.report(e)
+    await splat.report(e)  # async - use in async context
 ```
 
 ### With Context
 
 ```python
-await splat.report(
-    exception=e,
-    context={
-        "user_id": user.id,
-        "endpoint": "/checkout",
-    },
-)
+try:
+    process_order(user)
+except Exception as e:
+    await splat.report(
+        e,
+        context={
+            "user_id": user.id,
+            "endpoint": "/checkout",
+        },
+    )
 ```
 
 ### Flask Integration
@@ -146,17 +153,17 @@ Splat can capture Vercel runtime logs via Log Drain webhooks, providing precise 
    # Automatically registers /splat/logs webhook
    ```
 
-   FastAPI:
+   FastAPI (manual middleware wrapping to share Splat instance):
    ```python
    from fastapi import FastAPI
    from splat.middleware.fastapi import SplatMiddleware
    from splat.webhooks.fastapi import create_webhook_router
-   from splat import Splat
 
    app = FastAPI()
-   splat = Splat(repo="owner/repo", token="ghp_...")
-   app.add_middleware(SplatMiddleware, repo="owner/repo", token="ghp_...")
-   app.include_router(create_webhook_router(splat))
+   # Add webhook router first
+   middleware = SplatMiddleware(app, repo="owner/repo", token="ghp_...")
+   app.include_router(create_webhook_router(middleware.splat))
+   # Use middleware.app or wrap app manually if needed
    ```
 
 2. **Add Log Drain in Vercel:**
