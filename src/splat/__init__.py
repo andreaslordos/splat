@@ -1,4 +1,6 @@
 """Splat - Automatic GitHub issue creation on application crashes."""
 
+from splat.core.reporter import Splat
+
 __version__ = "0.1.0"
-__all__ = ["__version__"]
+__all__ = ["Splat", "__version__"]
