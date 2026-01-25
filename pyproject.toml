@@ -5,12 +5,22 @@ build-backend = "hatchling.build"
 [project]
 name = "splat"
 version = "0.1.0"
-description = "Automatic GitHub issue creation on application crashes"
+description = "Automatic GitHub issue creation + PR fix on runtime erorrs"
 readme = "README.md"
 requires-python = ">=3.9"
 license = "MIT"
 authors = [
-    { name = "Your Name", email = "you@example.com" }
+    { name = "Andreas Lordos" }
+]
+keywords = [
+    "error-tracking",
+    "crash-reporting",
+    "github-issues",
+    "debugging",
+    "monitoring",
+    "flask",
+    "fastapi",
+    "exception-handling",
 ]
 classifiers = [
     "Development Status :: 3 - Alpha",
@@ -21,11 +31,25 @@ classifiers = [
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
+    "Framework :: Flask",
+    "Framework :: FastAPI",
+    "Topic :: Software Development :: Bug Tracking",
+    "Topic :: Software Development :: Debuggers",
+    "Topic :: System :: Logging",
+    "Topic :: System :: Monitoring",
+    "Typing :: Typed",
+    "Environment :: Web Environment",
 ]
+
 dependencies = [
     "httpx>=0.25.0",
     "tomli>=2.0.0;python_version<'3.11'",
 ]
+
+[project.urls]
+Homepage = "https://github.com/andreaslordos/splat"
+Repository = "https://github.com/andreaslordos/splat"
+Issues = "https://github.com/andreaslordos/splat/issues"
 
 [project.optional-dependencies]
 cli = ["click>=8.0.0", "questionary>=2.0.0"]
