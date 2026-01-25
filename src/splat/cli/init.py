@@ -406,9 +406,18 @@ def check_vercel_auth() -> bool:
 
 def check_vercel_linked() -> bool:
     """Check if the current project is linked to Vercel."""
-    # vercel project ls returns error if not linked
+    # Check for .vercel directory with project.json
+    vercel_dir = Path.cwd() / ".vercel"
+    project_json = vercel_dir / "project.json"
+    if project_json.exists():
+        return True
+    # Fallback: vercel env ls returns error if not linked
     success, output = run_command(["vercel", "env", "ls"])
-    return success and "isn't linked" not in output
+    return (
+        success
+        and "isn't linked" not in output.lower()
+        and "not linked" not in output.lower()
+    )
 
 
 def set_github_secret(repo: str, name: str, value: str) -> bool:
@@ -420,12 +429,13 @@ def set_github_secret(repo: str, name: str, value: str) -> bool:
     return success
 
 
-def add_vercel_env(name: str, value: str) -> bool:
+def add_vercel_env(name: str, value: str) -> tuple[bool, str]:
     """Add environment variable to Vercel for all environments.
 
     Vercel CLI requires adding to each environment separately when piping values.
+    Returns (success, error_message).
     """
-    all_success = True
+    errors = []
     for env in ["production", "preview", "development"]:
         success, output = run_command(
             ["vercel", "env", "add", name, env, "-y"],
@@ -434,8 +444,10 @@ def add_vercel_env(name: str, value: str) -> bool:
         if not success:
             # Check if it failed because variable already exists
             if "already exists" not in output.lower():
-                all_success = False
-    return all_success
+                errors.append(f"{env}: {output}")
+    if errors:
+        return False, "; ".join(errors)
+    return True, ""
 
 
 # ============================================================================
@@ -1312,11 +1324,35 @@ def prompt_vercel_setup(token: str) -> bool:
 
     if add_env:
         click.echo("Adding SPLAT_GITHUB_TOKEN to Vercel...")
-        if add_vercel_env("SPLAT_GITHUB_TOKEN", token):
+        success, error = add_vercel_env("SPLAT_GITHUB_TOKEN", token)
+        if success:
             click.echo(click.style("✓ SPLAT_GITHUB_TOKEN added to Vercel", fg="green"))
             return True
         else:
             click.echo(click.style("Failed to add environment variable", fg="yellow"))
+            if error:
+                click.echo(click.style(f"  Error: {error}", fg="bright_black"))
+            # Check if project needs linking
+            if "not linked" in error.lower() or "link" in error.lower():
+                retry_link: bool = ask(
+                    questionary.confirm(
+                        "Project may not be linked. Run 'vercel link'?",
+                        default=True,
+                        style=CUSTOM_STYLE,
+                    )
+                )
+                if retry_link:
+                    subprocess.run(["vercel", "link"])
+                    # Retry adding env var
+                    click.echo("Retrying...")
+                    success, error = add_vercel_env("SPLAT_GITHUB_TOKEN", token)
+                    if success:
+                        click.echo(
+                            click.style(
+                                "✓ SPLAT_GITHUB_TOKEN added to Vercel", fg="green"
+                            )
+                        )
+                        return True
             click.echo("\nAdd SPLAT_GITHUB_TOKEN manually in Vercel dashboard:")
             click.echo("  Project Settings > Environment Variables")
             return False
