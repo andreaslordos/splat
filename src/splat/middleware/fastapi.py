@@ -59,5 +59,6 @@ class SplatMiddleware:
                 if request.client
                 else "unknown",
             }
-            await self.splat.report(e, context=context)
+            vercel_request_id = request.headers.get("x-vercel-id")
+            await self.splat.report(e, context=context, vercel_request_id=vercel_request_id)
             raise

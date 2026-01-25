@@ -77,6 +77,56 @@ class TestSplatMiddleware:
         assert context["method"] == "POST"
         assert context["path"] == "/api/checkout"
 
+    @pytest.mark.asyncio
+    async def test_middleware_captures_vercel_id_header(self) -> None:
+        """Test middleware captures x-vercel-id header and passes to report()."""
+        mock_app = MagicMock()
+
+        async def call_next(request: Any) -> None:
+            raise ValueError("test error")
+
+        middleware = SplatMiddleware(mock_app, repo="owner/repo", token="ghp_test")
+        middleware.splat.report = AsyncMock(return_value={"number": 1})
+
+        mock_request = MagicMock()
+        mock_request.method = "GET"
+        mock_request.url.path = "/test"
+        mock_request.client.host = "127.0.0.1"
+        mock_request.headers.get = MagicMock(return_value="fra1::abc123-1234567890")
+
+        with pytest.raises(ValueError):
+            await middleware.dispatch(mock_request, call_next)
+
+        # Verify report was called with vercel_request_id
+        middleware.splat.report.assert_called_once()
+        call_kwargs = middleware.splat.report.call_args[1]
+        assert call_kwargs.get("vercel_request_id") == "fra1::abc123-1234567890"
+
+    @pytest.mark.asyncio
+    async def test_middleware_works_without_vercel_id_header(self) -> None:
+        """Test middleware works when x-vercel-id header is not present."""
+        mock_app = MagicMock()
+
+        async def call_next(request: Any) -> None:
+            raise ValueError("test error")
+
+        middleware = SplatMiddleware(mock_app, repo="owner/repo", token="ghp_test")
+        middleware.splat.report = AsyncMock(return_value={"number": 1})
+
+        mock_request = MagicMock()
+        mock_request.method = "GET"
+        mock_request.url.path = "/test"
+        mock_request.client.host = "127.0.0.1"
+        mock_request.headers.get = MagicMock(return_value=None)
+
+        with pytest.raises(ValueError):
+            await middleware.dispatch(mock_request, call_next)
+
+        # Verify report was called with vercel_request_id=None
+        middleware.splat.report.assert_called_once()
+        call_kwargs = middleware.splat.report.call_args[1]
+        assert call_kwargs.get("vercel_request_id") is None
+
 
 class TestSplatMiddlewareClientHandling:
     """Test middleware client IP handling edge cases."""

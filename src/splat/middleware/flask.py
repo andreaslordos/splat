@@ -40,6 +40,7 @@ def create_error_handler(
             raise error
 
         context: dict[str, Any] = {}
+        vercel_request_id: str | None = None
         try:
             from flask import request
             context = {
@@ -48,10 +49,11 @@ def create_error_handler(
                 "remote_addr": request.remote_addr,
                 "url": request.url,
             }
+            vercel_request_id = request.headers.get("x-vercel-id")
         except (ImportError, RuntimeError):
             pass
 
-        _run_async(instance.report(error, context=context))
+        _run_async(instance.report(error, context=context, vercel_request_id=vercel_request_id))
         raise error
 
     return handler
