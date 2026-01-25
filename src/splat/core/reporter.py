@@ -11,6 +11,7 @@ from splat.core.config import SplatConfig, load_config
 from splat.core.dedup import generate_signature, check_duplicate
 from splat.core.formatter import format_issue_title, format_issue_body
 from splat.core.log_buffer import LogBuffer
+from splat.core.vercel_logs import VercelLogStore
 
 logger = logging.getLogger(__name__)
 
@@ -36,6 +37,9 @@ class Splat:
         enabled: bool | None = None,
         log_buffer_size: int | None = None,
         labels: list[str] | None = None,
+        vercel_secret: str | None = None,
+        vercel_webhook_path: str | None = None,
+        vercel_log_ttl: int | None = None,
     ) -> None:
         self.config = load_config(
             repo=repo,
@@ -43,11 +47,17 @@ class Splat:
             enabled=enabled,
             log_buffer_size=log_buffer_size,
             labels=labels,
+            vercel_secret=vercel_secret,
+            vercel_webhook_path=vercel_webhook_path,
+            vercel_log_ttl=vercel_log_ttl,
         )
 
         # Set up log buffer
         self._log_buffer = LogBuffer(capacity=self.config.log_buffer_size)
         logging.getLogger().addHandler(self._log_buffer)
+
+        # Set up Vercel log store
+        self._vercel_store = VercelLogStore(ttl_seconds=self.config.vercel_log_ttl)
 
         if not self.is_enabled():
             logger.warning(
@@ -68,6 +78,7 @@ class Splat:
         exception: BaseException,
         context: dict[str, Any] | None = None,
         logs: str | None = None,
+        vercel_request_id: str | None = None,
     ) -> dict[str, Any] | None:
         """
         Report an exception to GitHub Issues.
@@ -76,6 +87,7 @@ class Splat:
             exception: The exception to report
             context: Optional user-provided context dict
             logs: Optional log string (uses buffered logs if not provided)
+            vercel_request_id: Optional Vercel request ID to fetch logs from store
 
         Returns:
             Created issue data dict, or None if disabled/duplicate
@@ -98,8 +110,47 @@ class Splat:
             logger.info(f"Duplicate error, issue #{existing} already exists")
             return None
 
+        # Determine which logs to use
         if logs is None:
-            logs = self._log_buffer.get_logs_as_string()
+            if (
+                vercel_request_id is not None
+                and self._vercel_store.has_logs(vercel_request_id)
+            ):
+                # Use Vercel logs and remove them from store
+                logs = self._vercel_store.format_logs_as_string(vercel_request_id)
+                self._vercel_store.pop_logs(vercel_request_id)
+            else:
+                # Fall back to Python log buffer
+                logs = self._log_buffer.get_logs_as_string()
+
+        return await self._create_issue(
+            exception=exception,
+            signature=signature,
+            context=context,
+            logs=logs,
+        )
+
+    async def _create_issue(
+        self,
+        exception: BaseException,
+        signature: str,
+        context: dict[str, Any] | None,
+        logs: str,
+    ) -> dict[str, Any]:
+        """
+        Create a GitHub issue for the exception.
+
+        Args:
+            exception: The exception to report
+            signature: The generated signature for deduplication
+            context: Optional user-provided context dict
+            logs: Log string to include in the issue
+
+        Returns:
+            Created issue data dict
+        """
+        assert self.config.repo is not None
+        assert self.config.token is not None
 
         title = format_issue_title(exception)
         body = format_issue_body(
