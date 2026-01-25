@@ -201,6 +201,60 @@ class TestSplatFlask:
         from splat.middleware.flask import _get_splat
         assert _get_splat() is ext.splat
 
+    def test_init_app_registers_webhook_route_at_default_path(self) -> None:
+        """Test init_app registers webhook route at default path /splat/logs."""
+        mock_app = MagicMock()
+
+        ext = SplatFlask()
+        ext.init_app(mock_app, repo="owner/repo", token="ghp_test")
+
+        # Verify add_url_rule was called with default path
+        mock_app.add_url_rule.assert_called_once()
+        call_args = mock_app.add_url_rule.call_args
+        assert call_args[0][0] == "/splat/logs"
+        assert call_args[1]["endpoint"] == "splat_vercel_webhook"
+        assert call_args[1]["methods"] == ["POST"]
+
+    def test_init_app_uses_custom_webhook_path(self) -> None:
+        """Test init_app uses custom path from vercel_webhook_path kwarg."""
+        mock_app = MagicMock()
+
+        ext = SplatFlask()
+        ext.init_app(
+            mock_app,
+            repo="owner/repo",
+            token="ghp_test",
+            vercel_webhook_path="/custom/webhook",
+        )
+
+        # Verify add_url_rule was called with custom path
+        mock_app.add_url_rule.assert_called_once()
+        call_args = mock_app.add_url_rule.call_args
+        assert call_args[0][0] == "/custom/webhook"
+
+    def test_init_app_webhook_route_accepts_post_requests(self) -> None:
+        """Test webhook route is registered for POST method only."""
+        mock_app = MagicMock()
+
+        ext = SplatFlask()
+        ext.init_app(mock_app, repo="owner/repo", token="ghp_test")
+
+        # Verify methods is ["POST"]
+        call_args = mock_app.add_url_rule.call_args
+        assert call_args[1]["methods"] == ["POST"]
+
+    def test_init_app_webhook_handler_is_callable(self) -> None:
+        """Test webhook handler passed to add_url_rule is callable."""
+        mock_app = MagicMock()
+
+        ext = SplatFlask()
+        ext.init_app(mock_app, repo="owner/repo", token="ghp_test")
+
+        # Verify view_func is callable
+        call_args = mock_app.add_url_rule.call_args
+        view_func = call_args[1]["view_func"]
+        assert callable(view_func)
+
 
 class TestRunAsync:
     """Test _run_async helper function."""

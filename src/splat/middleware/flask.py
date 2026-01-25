@@ -72,3 +72,7 @@ class SplatFlask:
         self.splat = Splat(**kwargs)
         _splat_instance = self.splat
         app.register_error_handler(Exception, create_error_handler(self.splat))
+
+        # Auto-register Vercel webhook
+        from splat.webhooks.flask import register_webhook_route
+        register_webhook_route(app, self.splat)
