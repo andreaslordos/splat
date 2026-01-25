@@ -3,7 +3,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "splat"
+name = "py-splat"
 version = "0.1.0"
 description = "Automatic GitHub issue creation + PR fix on runtime erorrs"
 readme = "README.md"
@@ -95,8 +95,8 @@ line-length = 88
 select = ["E", "F", "I", "N", "W"]
 
 [tool.coverage.run]
-source = ["src/splat"]
-omit = ["*/tests/*", "src/splat/cli/init.py"]
+source = ["splat"]
+omit = ["*/tests/*", "*/cli/init.py"]
 
 [tool.coverage.report]
 fail_under = 80
