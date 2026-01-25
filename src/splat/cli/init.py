@@ -1248,8 +1248,8 @@ def prompt_github_secret_setup(repo: str, auth_type: str, token: str) -> bool:
     return False
 
 
-def prompt_vercel_setup(token: str) -> bool:
-    """Set up Vercel environment variable."""
+def prompt_vercel_setup(token: str, repo: str) -> bool:
+    """Set up Vercel environment variables (token and repo)."""
     click.echo("\n" + click.style("─" * 50, fg="cyan"))
     click.echo(click.style("Vercel Environment Setup", fg="cyan", bold=True))
     click.echo(click.style("─" * 50, fg="cyan"))
@@ -1268,13 +1268,15 @@ def prompt_vercel_setup(token: str) -> bool:
             success, output = run_command(["npm", "install", "-g", "vercel"])
             if not success:
                 click.echo(click.style(f"Failed to install: {output}", fg="yellow"))
-                click.echo("\nAdd SPLAT_GITHUB_TOKEN manually in Vercel dashboard:")
+                click.echo("\nAdd these env vars manually in Vercel dashboard:")
                 click.echo("  Project Settings > Environment Variables")
+                click.echo("    SPLAT_GITHUB_TOKEN, SPLAT_GITHUB_REPO")
                 return False
             click.echo(click.style("✓ Vercel CLI installed", fg="green"))
         else:
-            click.echo("\nAdd SPLAT_GITHUB_TOKEN manually in Vercel dashboard:")
+            click.echo("\nAdd these env vars manually in Vercel dashboard:")
             click.echo("  Project Settings > Environment Variables")
+            click.echo("    SPLAT_GITHUB_TOKEN, SPLAT_GITHUB_REPO")
             return False
 
     if not check_vercel_auth():
@@ -1295,12 +1297,14 @@ def prompt_vercel_setup(token: str) -> bool:
 
             if not check_vercel_auth():
                 click.echo(click.style("Still not logged in", fg="yellow"))
-                click.echo("\nAdd SPLAT_GITHUB_TOKEN manually in Vercel dashboard:")
+                click.echo("\nAdd these env vars manually in Vercel dashboard:")
                 click.echo("  Project Settings > Environment Variables")
+                click.echo("    SPLAT_GITHUB_TOKEN, SPLAT_GITHUB_REPO")
                 return False
         else:
-            click.echo("\nAdd SPLAT_GITHUB_TOKEN manually in Vercel dashboard:")
+            click.echo("\nAdd these env vars manually in Vercel dashboard:")
             click.echo("  Project Settings > Environment Variables")
+            click.echo("    SPLAT_GITHUB_TOKEN, SPLAT_GITHUB_REPO")
             return False
 
     # Check if project is linked to Vercel CLI
@@ -1320,18 +1324,20 @@ def prompt_vercel_setup(token: str) -> bool:
 
             if not check_vercel_linked():
                 click.echo(click.style("Project still not linked", fg="yellow"))
-                click.echo("\nAdd SPLAT_GITHUB_TOKEN manually in Vercel dashboard:")
+                click.echo("\nAdd these env vars manually in Vercel dashboard:")
                 click.echo("  Project Settings > Environment Variables")
+                click.echo("    SPLAT_GITHUB_TOKEN, SPLAT_GITHUB_REPO")
                 return False
         else:
-            click.echo("\nAdd SPLAT_GITHUB_TOKEN manually in Vercel dashboard:")
+            click.echo("\nAdd these env vars manually in Vercel dashboard:")
             click.echo("  Project Settings > Environment Variables")
+            click.echo("    SPLAT_GITHUB_TOKEN, SPLAT_GITHUB_REPO")
             return False
 
     # Ask which environments to add the variable to
     add_env: bool = ask(
         questionary.confirm(
-            "Add SPLAT_GITHUB_TOKEN to Vercel environment?",
+            "Add Splat env vars (SPLAT_GITHUB_TOKEN, SPLAT_GITHUB_REPO) to Vercel?",
             default=True,
             style=CUSTOM_STYLE,
         )
@@ -1343,8 +1349,9 @@ def prompt_vercel_setup(token: str) -> bool:
             click.style("⚠ Warning: ", fg="yellow", bold=True)
             + "Splat won't be able to create GitHub issues from Vercel deployments."
         )
-        click.echo("  Add SPLAT_GITHUB_TOKEN manually:")
-        click.echo("  Project Settings > Environment Variables")
+        click.echo("  Add these env vars manually in Vercel dashboard:")
+        click.echo("    SPLAT_GITHUB_TOKEN")
+        click.echo("    SPLAT_GITHUB_REPO")
         return False
 
     # Fetch available environments
@@ -1376,17 +1383,38 @@ def prompt_vercel_setup(token: str) -> bool:
         click.echo(click.style("No environments selected", fg="yellow"))
         return False
 
-    click.echo(f"Adding SPLAT_GITHUB_TOKEN to {', '.join(environments)}...")
-    success, error = add_vercel_env("SPLAT_GITHUB_TOKEN", token, environments)
-    if success:
+    click.echo(f"Adding Splat env vars to {', '.join(environments)}...")
+
+    # Add SPLAT_GITHUB_TOKEN
+    token_success, token_error = add_vercel_env(
+        "SPLAT_GITHUB_TOKEN", token, environments
+    )
+    if token_success:
         click.echo(click.style("✓ SPLAT_GITHUB_TOKEN added to Vercel", fg="green"))
-        return True
     else:
-        click.echo(click.style("Failed to add environment variable", fg="yellow"))
-        if error:
-            click.echo(click.style(f"  Error: {error}", fg="bright_black"))
+        click.echo(
+            click.style(
+                f"✗ Failed to add SPLAT_GITHUB_TOKEN: {token_error}", fg="yellow"
+            )
+        )
+
+    # Add SPLAT_GITHUB_REPO
+    repo_success, repo_error = add_vercel_env("SPLAT_GITHUB_REPO", repo, environments)
+    if repo_success:
+        click.echo(click.style("✓ SPLAT_GITHUB_REPO added to Vercel", fg="green"))
+    else:
+        click.echo(
+            click.style(f"✗ Failed to add SPLAT_GITHUB_REPO: {repo_error}", fg="yellow")
+        )
+
+    if token_success and repo_success:
+        return True
+
+    # Handle failures
+    if not token_success or not repo_success:
+        error = token_error or repo_error
         # Check if project needs linking
-        if "not linked" in error.lower() or "link" in error.lower():
+        if error and ("not linked" in error.lower() or "link" in error.lower()):
             retry_link: bool = ask(
                 questionary.confirm(
                     "Project may not be linked. Run 'vercel link'?",
@@ -1396,19 +1424,40 @@ def prompt_vercel_setup(token: str) -> bool:
             )
             if retry_link:
                 subprocess.run(["vercel", "link"])
-                # Retry adding env var
+                # Retry adding env vars
                 click.echo("Retrying...")
-                success, error = add_vercel_env(
-                    "SPLAT_GITHUB_TOKEN", token, environments
-                )
-                if success:
-                    click.echo(
-                        click.style("✓ SPLAT_GITHUB_TOKEN added to Vercel", fg="green")
+                if not token_success:
+                    token_success, _ = add_vercel_env(
+                        "SPLAT_GITHUB_TOKEN", token, environments
                     )
+                    if token_success:
+                        click.echo(
+                            click.style(
+                                "✓ SPLAT_GITHUB_TOKEN added to Vercel", fg="green"
+                            )
+                        )
+                if not repo_success:
+                    repo_success, _ = add_vercel_env(
+                        "SPLAT_GITHUB_REPO", repo, environments
+                    )
+                    if repo_success:
+                        click.echo(
+                            click.style(
+                                "✓ SPLAT_GITHUB_REPO added to Vercel", fg="green"
+                            )
+                        )
+                if token_success and repo_success:
                     return True
-        click.echo("\nAdd SPLAT_GITHUB_TOKEN manually in Vercel dashboard:")
+
+        click.echo("\nAdd missing env vars manually in Vercel dashboard:")
         click.echo("  Project Settings > Environment Variables")
+        if not token_success:
+            click.echo("    SPLAT_GITHUB_TOKEN")
+        if not repo_success:
+            click.echo("    SPLAT_GITHUB_REPO")
         return False
+
+    return True
 
 
 def prompt_middleware_injection(info: ProjectInfo) -> bool:
@@ -1591,9 +1640,9 @@ def _run_wizard_steps(base_path: Path, state: WizardState) -> None:
                     state.repo, state.claude_auth_type, state.claude_token
                 )
 
-    # 8. Vercel integration (if detected and token exists)
-    if info.is_vercel and state.github_token:
-        state.vercel_env_added = prompt_vercel_setup(state.github_token)
+    # 8. Vercel integration (if detected and token and repo exist)
+    if info.is_vercel and state.github_token and state.repo:
+        state.vercel_env_added = prompt_vercel_setup(state.github_token, state.repo)
 
     # 9. Middleware injection
     state.middleware_injected = prompt_middleware_injection(info)
@@ -1657,12 +1706,13 @@ def _run_wizard_steps(base_path: Path, state: WizardState) -> None:
     if info.is_vercel:
         if state.vercel_env_added:
             click.echo(
-                click.style("✓", fg="green") + " Vercel: SPLAT_GITHUB_TOKEN added"
+                click.style("✓", fg="green")
+                + " Vercel: SPLAT_GITHUB_TOKEN and SPLAT_GITHUB_REPO added"
             )
         elif state.github_token:
             click.echo(
                 click.style("○", fg="yellow")
-                + " Vercel: add SPLAT_GITHUB_TOKEN manually"
+                + " Vercel: add SPLAT_GITHUB_TOKEN and SPLAT_GITHUB_REPO manually"
             )
         else:
             click.echo(
