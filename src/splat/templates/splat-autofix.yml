@@ -3,23 +3,70 @@ name: Splat Auto-Fix
 on:
   issues:
     types: [labeled]
+  issue_comment:
+    types: [created]
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+  id-token: write
+
+concurrency:
+  group: autofix-${{ github.event.issue.number }}
+  cancel-in-progress: true
 
 jobs:
   autofix:
-    if: github.event.label.name == 'auto-fix'
+    if: |
+      (github.event_name == 'issues' && github.event.label.name == 'auto-fix') ||
+      (github.event_name == 'issue_comment' && contains(github.event.comment.body, '@claude'))
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
-      issues: write
-      pull-requests: write
+    timeout-minutes: 120
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
 
       - name: Fix with Claude Code
         uses: anthropics/claude-code-action@v1
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
-          issue_number: ${{ github.event.issue.number }}
           model: claude-sonnet-4-20250514
-          max_turns: 50
+          max_turns: 100
+          prompt: |
+            You are fixing a bug reported in this GitHub issue.
+
+            ## Systematic Debugging Process
+
+            BEFORE attempting ANY fix, complete these phases:
+
+            ### Phase 1: Root Cause Investigation
+            1. Read error messages completely - stack traces, line numbers, error codes
+            2. Reproduce the issue - understand exact steps to trigger
+            3. Check recent changes - git diff, recent commits, config changes
+            4. Trace data flow - where does the bad value originate?
+
+            ### Phase 2: Pattern Analysis
+            1. Find working examples in the codebase
+            2. Compare against references - read completely, don't skim
+            3. Identify differences between working and broken
+
+            ### Phase 3: Hypothesis Testing
+            1. Form single hypothesis: "X is root cause because Y"
+            2. Make SMALLEST possible change to test
+            3. One variable at a time - don't fix multiple things at once
+
+            ### Phase 4: Implementation
+            1. Create failing test case FIRST (if test infrastructure exists)
+            2. Implement single fix addressing root cause
+            3. Verify fix - test passes, no regressions
+            4. If 3+ fixes fail, STOP - this indicates architectural problem
+
+            ## Rules
+            - NO FIXES WITHOUT ROOT CAUSE INVESTIGATION
+            - Never guess - if you don't understand, investigate more
+            - Symptom fixes are failure - fix the source
+            - Verify your fix works before claiming success
+            - Create a PR with your changes when complete

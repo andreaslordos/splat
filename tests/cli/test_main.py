@@ -1,5 +1,7 @@
 """Tests for CLI entry point."""
 
+from unittest.mock import MagicMock, patch
+
 from click.testing import CliRunner
 
 from splat.cli.main import cli
@@ -32,10 +34,20 @@ class TestCli:
         assert "splat" in result.output.lower()
 
     def test_init_command_runs(self) -> None:
+        """Test init command runs with mocked questionary."""
+        # Create mock for questionary
+        mock_questionary = MagicMock()
+        mock_questionary.confirm.return_value.ask.return_value = False
+        mock_questionary.select.return_value.ask.return_value = "Skip for now"
+        mock_questionary.text.return_value.ask.return_value = "owner/repo"
+        mock_questionary.password.return_value.ask.return_value = ""
+
         runner = CliRunner()
-        result = runner.invoke(cli, ["init"])
+        with runner.isolated_filesystem():
+            with patch("splat.cli.init.questionary", mock_questionary):
+                result = runner.invoke(cli, ["init"])
         assert result.exit_code == 0
-        assert "wizard" in result.output.lower() or "init" in result.output.lower()
+        assert "splat" in result.output.lower() or "setup" in result.output.lower()
 
     def test_install_autofix_command_runs(self) -> None:
         runner = CliRunner()

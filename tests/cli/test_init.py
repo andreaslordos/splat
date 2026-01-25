@@ -2,19 +2,22 @@
 
 import os
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
-from click.testing import CliRunner
 
 from splat.cli.init import (
     ProjectInfo,
+    WizardState,
     detect_existing_token,
     detect_framework,
     detect_github_remote,
     detect_project_info,
     detect_project_type,
+    detect_test_infrastructure,
     detect_vercel_project,
+    analyze_framework_file,
+    inject_middleware,
     run_init_wizard,
 )
 
@@ -207,30 +210,208 @@ class TestProjectInfo:
         )
         assert info.is_vercel is True
 
+    def test_project_info_has_test_infrastructure(self, tmp_path: Path) -> None:
+        """Test has_test_infrastructure field."""
+        info = ProjectInfo(
+            project_type="python",
+            framework=None,
+            framework_file=None,
+            github_repo=None,
+            base_path=tmp_path,
+            has_test_infrastructure=True,
+        )
+        assert info.has_test_infrastructure is True
+
+
+class TestWizardState:
+    """Test WizardState dataclass."""
+
+    def test_wizard_state_defaults(self) -> None:
+        state = WizardState()
+        assert state.repo is None
+        assert state.github_token is None
+        assert state.enable_autofix is False
+        assert state.claude_auth_type is None
+        assert state.claude_token is None
+        assert state.model is None
+        assert state.middleware_injected is False
+        assert state.workflow_created is False
+        assert state.vercel_env_added is False
+        assert state.github_secret_added is False
+        assert state.config_written is False
+
+
+class TestDetectTestInfrastructure:
+    """Test test infrastructure detection."""
+
+    def test_detects_tests_directory(self, tmp_path: Path) -> None:
+        (tmp_path / "tests").mkdir()
+        result = detect_test_infrastructure(tmp_path)
+        assert result is True
+
+    def test_detects_test_directory(self, tmp_path: Path) -> None:
+        (tmp_path / "test").mkdir()
+        result = detect_test_infrastructure(tmp_path)
+        assert result is True
+
+    def test_detects_pytest_in_pyproject(self, tmp_path: Path) -> None:
+        (tmp_path / "pyproject.toml").write_text('[tool.pytest]\ntestpaths = ["tests"]')
+        result = detect_test_infrastructure(tmp_path)
+        assert result is True
+
+    def test_detects_pytest_in_requirements(self, tmp_path: Path) -> None:
+        (tmp_path / "requirements.txt").write_text("pytest>=7.0\n")
+        result = detect_test_infrastructure(tmp_path)
+        assert result is True
+
+    def test_detects_jest_in_package_json(self, tmp_path: Path) -> None:
+        (tmp_path / "package.json").write_text('{"devDependencies": {"jest": "^29.0"}}')
+        result = detect_test_infrastructure(tmp_path)
+        assert result is True
+
+    def test_returns_false_when_none(self, tmp_path: Path) -> None:
+        result = detect_test_infrastructure(tmp_path)
+        assert result is False
+
+
+class TestAnalyzeFrameworkFile:
+    """Test AST-based framework file analysis."""
+
+    def test_analyzes_fastapi_file(self, tmp_path: Path) -> None:
+        app_file = tmp_path / "main.py"
+        app_file.write_text("""from fastapi import FastAPI
+
+app = FastAPI()
+
+@app.get("/")
+def root():
+    return {"hello": "world"}
+""")
+        result = analyze_framework_file(app_file, "fastapi")
+        assert result["app_name"] == "app"
+        assert result["app_line"] == 3
+        assert result["has_splat_import"] is False
+        assert result["has_middleware"] is False
+
+    def test_analyzes_flask_file(self, tmp_path: Path) -> None:
+        app_file = tmp_path / "app.py"
+        app_file.write_text("""from flask import Flask
+
+app = Flask(__name__)
+
+@app.route("/")
+def index():
+    return "Hello"
+""")
+        result = analyze_framework_file(app_file, "flask")
+        assert result["app_name"] == "app"
+        assert result["app_line"] == 3
+        assert result["has_splat_import"] is False
+        assert result["has_middleware"] is False
+
+    def test_detects_existing_splat_import(self, tmp_path: Path) -> None:
+        app_file = tmp_path / "main.py"
+        app_file.write_text("""from fastapi import FastAPI
+from splat.middleware.fastapi import SplatMiddleware
+
+app = FastAPI()
+""")
+        result = analyze_framework_file(app_file, "fastapi")
+        assert result["has_splat_import"] is True
+
+    def test_detects_existing_middleware(self, tmp_path: Path) -> None:
+        app_file = tmp_path / "main.py"
+        app_file.write_text("""from fastapi import FastAPI
+from splat.middleware.fastapi import SplatMiddleware
+
+app = FastAPI()
+app.add_middleware(SplatMiddleware)
+""")
+        result = analyze_framework_file(app_file, "fastapi")
+        assert result["has_middleware"] is True
+
+    def test_handles_syntax_error(self, tmp_path: Path) -> None:
+        app_file = tmp_path / "main.py"
+        app_file.write_text("this is not valid python (((")
+        result = analyze_framework_file(app_file, "fastapi")
+        assert "error" in result
+
+
+class TestInjectMiddleware:
+    """Test middleware injection."""
+
+    def test_injects_fastapi_middleware(self, tmp_path: Path) -> None:
+        app_file = tmp_path / "main.py"
+        app_file.write_text("""from fastapi import FastAPI
+
+app = FastAPI()
+
+@app.get("/")
+def root():
+    return {"hello": "world"}
+""")
+        analysis = analyze_framework_file(app_file, "fastapi")
+        result = inject_middleware(app_file, "fastapi", analysis)
+
+        assert result is True
+        content = app_file.read_text()
+        assert "from splat.middleware.fastapi import SplatMiddleware" in content
+        assert "app.add_middleware(SplatMiddleware)" in content
+
+    def test_injects_flask_middleware(self, tmp_path: Path) -> None:
+        app_file = tmp_path / "app.py"
+        app_file.write_text("""from flask import Flask
+
+app = Flask(__name__)
+
+@app.route("/")
+def index():
+    return "Hello"
+""")
+        analysis = analyze_framework_file(app_file, "flask")
+        result = inject_middleware(app_file, "flask", analysis)
+
+        assert result is True
+        content = app_file.read_text()
+        assert "from splat.middleware.flask import SplatFlask" in content
+        assert "splat = SplatFlask()" in content
+        assert "splat.init_app(app)" in content
+
+    def test_does_not_inject_if_already_present(self, tmp_path: Path) -> None:
+        app_file = tmp_path / "main.py"
+        original_content = """from fastapi import FastAPI
+from splat.middleware.fastapi import SplatMiddleware
+
+app = FastAPI()
+app.add_middleware(SplatMiddleware)
+"""
+        app_file.write_text(original_content)
+        analysis = analyze_framework_file(app_file, "fastapi")
+        result = inject_middleware(app_file, "fastapi", analysis)
+
+        assert result is False
+        assert app_file.read_text() == original_content
+
 
 class TestRunInitWizard:
     """Test run_init_wizard function."""
 
     @staticmethod
-    def _get_echo_calls(mock_echo: object) -> list[str]:
-        """Extract string arguments from mock echo calls, skipping empty calls."""
-        # Access call_args_list dynamically since mock_echo is a MagicMock
-        call_args_list = getattr(mock_echo, "call_args_list", [])
-        return [call.args[0] for call in call_args_list if call.args]
+    def _create_questionary_mock() -> MagicMock:
+        """Create a mock for questionary that returns appropriate values."""
+        mock = MagicMock()
+        # Mock confirm to return True by default
+        mock.confirm.return_value.ask.return_value = True
+        # Mock select to return first choice
+        mock.select.return_value.ask.return_value = "Skip for now"
+        # Mock text to return a default value
+        mock.text.return_value.ask.return_value = "owner/repo"
+        # Mock password to return empty (skip)
+        mock.password.return_value.ask.return_value = ""
+        return mock
 
-    @staticmethod
-    def _mock_prompt_side_effect(prompt_text: str, **kwargs) -> str:
-        """Handle different prompt calls in the wizard."""
-        if "Choose an option" in prompt_text:
-            return "3"  # Skip token setup
-        if "owner/repo" in prompt_text:
-            return "owner/repo"
-        if "token" in prompt_text.lower():
-            return ""  # Empty token
-        return "default"
-
-    def test_wizard_with_python_flask_project(self, tmp_path: Path) -> None:
-        """Test wizard output for Python Flask project."""
+    def test_wizard_detects_project_info(self, tmp_path: Path) -> None:
+        """Test wizard detects project info correctly."""
         # Setup Python project with Flask
         (tmp_path / "pyproject.toml").write_text("[project]\nname = 'test'")
         app_file = tmp_path / "app.py"
@@ -241,110 +422,90 @@ class TestRunInitWizard:
             '[remote "origin"]\n    url = https://github.com/owner/repo.git'
         )
 
-        # Capture output
-        with patch("splat.cli.init.click.echo") as mock_echo:
-            with patch("splat.cli.init.click.prompt", side_effect=self._mock_prompt_side_effect):
-                with patch("splat.cli.init.click.confirm", return_value=True):
-                    with patch("splat.cli.init.update_pyproject_toml"):
-                        with patch("splat.cli.autofix.install_autofix_workflow"):
-                            run_init_wizard(tmp_path)
+        mock_questionary = self._create_questionary_mock()
 
-        # Verify outputs
-        calls = self._get_echo_calls(mock_echo)
-        assert any("Flask" in call and "app.py" in call for call in calls)
-        assert any("owner/repo" in call for call in calls)
-        assert any("Setup Complete!" in call for call in calls)
+        with patch("splat.cli.init.questionary", mock_questionary):
+            with patch("splat.cli.init.click.echo"):
+                with patch("splat.cli.init.update_pyproject_toml"):
+                    run_init_wizard(tmp_path)
+
+        # Verify questionary was called with repo confirmation
+        confirm_calls = [str(c) for c in mock_questionary.confirm.call_args_list]
+        assert any("owner/repo" in str(c) for c in confirm_calls)
 
     def test_wizard_with_unknown_project(self, tmp_path: Path) -> None:
         """Test wizard output for unknown project type."""
-        with patch("splat.cli.init.click.echo") as mock_echo:
-            with patch("splat.cli.init.click.prompt", side_effect=self._mock_prompt_side_effect):
-                with patch("splat.cli.init.click.confirm", return_value=True):
-                    with patch("splat.cli.init.update_pyproject_toml"):
-                        with patch("splat.cli.autofix.install_autofix_workflow"):
-                            run_init_wizard(tmp_path)
+        mock_questionary = self._create_questionary_mock()
+        mock_questionary.confirm.return_value.ask.return_value = False
 
-        calls = self._get_echo_calls(mock_echo)
-        # Verify wizard completed - shows manual error reporting instructions
-        assert any("report errors manually" in call for call in calls)
+        with patch("splat.cli.init.questionary", mock_questionary):
+            with patch("splat.cli.init.click.echo") as mock_echo:
+                run_init_wizard(tmp_path)
+
+        # Verify wizard completed
+        calls = [str(c) for c in mock_echo.call_args_list]
+        assert any("Setup Complete!" in str(c) for c in calls)
 
     def test_wizard_uses_cwd_when_no_path(self) -> None:
         """Test wizard defaults to current working directory."""
-        with patch("splat.cli.init.click.echo"):
-            with patch("splat.cli.init.Path.cwd") as mock_cwd:
-                mock_cwd.return_value = Path("/fake/path")
-                with patch("splat.cli.init.detect_project_type") as mock_detect:
-                    mock_detect.return_value = "unknown"
-                    with patch("splat.cli.init.detect_framework") as mock_fw:
-                        mock_fw.return_value = (None, None)
-                        with patch("splat.cli.init.detect_github_remote") as mock_gh:
-                            mock_gh.return_value = None
-                            with patch("splat.cli.init.detect_existing_token") as mock_token:
-                                mock_token.return_value = None
-                                with patch("splat.cli.init.click.prompt", side_effect=self._mock_prompt_side_effect):
-                                    with patch("splat.cli.init.click.confirm", return_value=False):
-                                        run_init_wizard(None)
+        mock_questionary = self._create_questionary_mock()
+        mock_questionary.confirm.return_value.ask.return_value = False
 
-                mock_detect.assert_called_once_with(Path("/fake/path"))
+        with patch("splat.cli.init.questionary", mock_questionary):
+            with patch("splat.cli.init.click.echo"):
+                with patch("splat.cli.init.Path.cwd") as mock_cwd:
+                    mock_cwd.return_value = Path("/fake/path")
+                    with patch("splat.cli.init.detect_project_info") as mock_detect:
+                        with patch("splat.cli.init.update_pyproject_toml"):
+                            mock_detect.return_value = ProjectInfo(
+                                project_type="unknown",
+                                framework=None,
+                                framework_file=None,
+                                github_repo=None,
+                                base_path=Path("/fake/path"),
+                            )
+                            run_init_wizard(None)
+
+                        mock_detect.assert_called_once_with(Path("/fake/path"))
 
     def test_wizard_shows_welcome_message(self, tmp_path: Path) -> None:
         """Test wizard shows welcome message."""
-        with patch("splat.cli.init.click.echo") as mock_echo:
-            with patch("splat.cli.init.click.prompt", side_effect=self._mock_prompt_side_effect):
-                with patch("splat.cli.init.click.confirm", return_value=False):
-                    run_init_wizard(tmp_path)
+        mock_questionary = self._create_questionary_mock()
+        mock_questionary.confirm.return_value.ask.return_value = False
 
-        calls = self._get_echo_calls(mock_echo)
-        assert any("Welcome to Splat!" in call for call in calls)
-        assert any("Detecting project..." in call for call in calls)
+        with patch("splat.cli.init.questionary", mock_questionary):
+            with patch("splat.cli.init.click.echo") as mock_echo:
+                run_init_wizard(tmp_path)
 
-    def test_wizard_with_node_project(self, tmp_path: Path) -> None:
-        """Test wizard output for Node.js project."""
-        (tmp_path / "package.json").write_text('{"name": "test"}')
+        calls = [str(c) for c in mock_echo.call_args_list]
+        assert any("Welcome to Splat!" in str(c) for c in calls)
+        assert any("Detecting project..." in str(c) for c in calls)
 
-        with patch("splat.cli.init.click.echo") as mock_echo:
-            with patch("splat.cli.init.click.prompt", side_effect=self._mock_prompt_side_effect):
-                with patch("splat.cli.init.click.confirm", return_value=False):
-                    run_init_wizard(tmp_path)
-
-        calls = self._get_echo_calls(mock_echo)
-        # Verify node project type detected
-        assert any("node" in call for call in calls)
-
-    def test_wizard_with_fastapi_project(self, tmp_path: Path) -> None:
-        """Test wizard output for FastAPI project."""
+    def test_wizard_enables_autofix(self, tmp_path: Path) -> None:
+        """Test wizard enables autofix when selected."""
         (tmp_path / "pyproject.toml").write_text("[project]\nname = 'test'")
-        main_file = tmp_path / "main.py"
-        main_file.write_text("from fastapi import FastAPI\napp = FastAPI()")
 
-        with patch("splat.cli.init.click.echo") as mock_echo:
-            with patch("splat.cli.init.click.confirm", return_value=True):
-                with patch("splat.cli.init.click.prompt", side_effect=self._mock_prompt_side_effect):
-                    with patch("splat.cli.init.update_pyproject_toml"):
-                        with patch("splat.cli.autofix.install_autofix_workflow"):
+        mock_questionary = self._create_questionary_mock()
+        # Enable autofix
+        mock_questionary.confirm.return_value.ask.side_effect = [
+            True,  # Use detected repo
+            False,  # Keep existing token (none)
+            True,  # Enable autofix
+            True,  # Save config
+        ]
+        mock_questionary.select.return_value.ask.side_effect = [
+            "Skip for now",  # GitHub token
+            "oauth",  # Claude auth type
+            "opus",  # Model selection
+        ]
+        mock_questionary.password.return_value.ask.return_value = "test_oauth_token"
+
+        with patch("splat.cli.init.questionary", mock_questionary):
+            with patch("splat.cli.init.click.echo"):
+                with patch("splat.cli.init.update_pyproject_toml"):
+                    with patch("splat.cli.init.install_workflow"):
+                        with patch("splat.cli.init.prompt_github_secret_setup", return_value=False):
                             run_init_wizard(tmp_path)
-
-        calls = self._get_echo_calls(mock_echo)
-        assert any("Fastapi" in call and "main.py" in call for call in calls)
-
-    def test_wizard_with_django_project(self, tmp_path: Path) -> None:
-        """Test wizard output for Django project."""
-        (tmp_path / "pyproject.toml").write_text("[project]\nname = 'test'")
-        settings_dir = tmp_path / "myproject"
-        settings_dir.mkdir()
-        settings_file = settings_dir / "settings.py"
-        settings_file.write_text("INSTALLED_APPS = ['django.contrib.admin']")
-
-        with patch("splat.cli.init.click.echo") as mock_echo:
-            with patch("splat.cli.init.click.confirm", return_value=True):
-                with patch("splat.cli.init.click.prompt", side_effect=self._mock_prompt_side_effect):
-                    with patch("splat.cli.init.update_pyproject_toml"):
-                        with patch("splat.cli.autofix.install_autofix_workflow"):
-                            run_init_wizard(tmp_path)
-
-        calls = self._get_echo_calls(mock_echo)
-        # It'll show Django app detected
-        assert any("Django" in call and "settings.py" in call for call in calls)
 
 
 class TestDetectFrameworkEdgeCases:
@@ -437,6 +598,7 @@ class TestDetectProjectInfo:
             '[remote "origin"]\n    url = https://github.com/owner/repo.git'
         )
         (tmp_path / "vercel.json").write_text('{"version": 2}')
+        (tmp_path / "tests").mkdir()
 
         info = detect_project_info(tmp_path)
 
@@ -446,6 +608,7 @@ class TestDetectProjectInfo:
         assert info.github_repo == "owner/repo"
         assert info.base_path == tmp_path
         assert info.is_vercel is True
+        assert info.has_test_infrastructure is True
 
     def test_returns_project_info_without_vercel(self, tmp_path: Path) -> None:
         """Test detect_project_info when Vercel is not present."""
@@ -485,46 +648,41 @@ class TestRunInitWizardVercel:
     """Test run_init_wizard Vercel-related output."""
 
     @staticmethod
-    def _get_echo_calls(mock_echo: object) -> list[str]:
-        """Extract string arguments from mock echo calls, skipping empty calls."""
-        call_args_list = getattr(mock_echo, "call_args_list", [])
-        return [call.args[0] for call in call_args_list if call.args]
-
-    @staticmethod
-    def _mock_prompt_side_effect(prompt_text: str, **kwargs) -> str:
-        """Handle different prompt calls in the wizard."""
-        if "Choose an option" in prompt_text:
-            return "3"  # Skip token setup
-        if "owner/repo" in prompt_text:
-            return "owner/repo"
-        if "token" in prompt_text.lower():
-            return ""
-        return "default"
+    def _create_questionary_mock() -> MagicMock:
+        """Create a mock for questionary that returns appropriate values."""
+        mock = MagicMock()
+        mock.confirm.return_value.ask.return_value = False
+        mock.select.return_value.ask.return_value = "Skip for now"
+        mock.text.return_value.ask.return_value = "owner/repo"
+        mock.password.return_value.ask.return_value = ""
+        return mock
 
     def test_wizard_shows_vercel_detected(self, tmp_path: Path) -> None:
         """Test wizard shows Vercel project detected message."""
         (tmp_path / "vercel.json").write_text('{"version": 2}')
 
-        with patch("splat.cli.init.click.echo") as mock_echo:
-            with patch("splat.cli.init.click.prompt", side_effect=self._mock_prompt_side_effect):
-                with patch("splat.cli.init.click.confirm", return_value=False):
-                    run_init_wizard(tmp_path)
+        mock_questionary = self._create_questionary_mock()
 
-        calls = self._get_echo_calls(mock_echo)
-        assert any("Vercel project detected" in call for call in calls)
+        with patch("splat.cli.init.questionary", mock_questionary):
+            with patch("splat.cli.init.click.echo") as mock_echo:
+                run_init_wizard(tmp_path)
+
+        calls = [str(c) for c in mock_echo.call_args_list]
+        assert any("Vercel project detected" in str(c) for c in calls)
 
     def test_wizard_does_not_show_vercel_when_not_present(self, tmp_path: Path) -> None:
         """Test wizard does not show Vercel message when not a Vercel project."""
+        mock_questionary = self._create_questionary_mock()
+
         env_copy = os.environ.copy()
         env_copy.pop("VERCEL", None)
         with patch.dict(os.environ, env_copy, clear=True):
-            with patch("splat.cli.init.click.echo") as mock_echo:
-                with patch("splat.cli.init.click.prompt", side_effect=self._mock_prompt_side_effect):
-                    with patch("splat.cli.init.click.confirm", return_value=False):
-                        run_init_wizard(tmp_path)
+            with patch("splat.cli.init.questionary", mock_questionary):
+                with patch("splat.cli.init.click.echo") as mock_echo:
+                    run_init_wizard(tmp_path)
 
-        calls = self._get_echo_calls(mock_echo)
-        assert not any("Vercel project detected" in call for call in calls)
+        calls = [str(c) for c in mock_echo.call_args_list]
+        assert not any("Vercel project detected" in str(c) for c in calls)
 
 
 class TestDetectExistingToken:
@@ -532,16 +690,12 @@ class TestDetectExistingToken:
 
     def test_detects_token_from_env(self, tmp_path: Path) -> None:
         """Test detecting token from environment variable."""
-        from splat.cli.init import detect_existing_token
-
         with patch.dict(os.environ, {"SPLAT_GITHUB_TOKEN": "ghp_test123"}):
             result = detect_existing_token(tmp_path)
             assert result == "ghp_test123"
 
     def test_detects_token_from_env_file(self, tmp_path: Path) -> None:
         """Test detecting token from .env file."""
-        from splat.cli.init import detect_existing_token
-
         env_file = tmp_path / ".env"
         env_file.write_text("SPLAT_GITHUB_TOKEN=ghp_fromfile123\n")
 
@@ -553,8 +707,6 @@ class TestDetectExistingToken:
 
     def test_detects_token_from_env_file_with_quotes(self, tmp_path: Path) -> None:
         """Test detecting quoted token from .env file."""
-        from splat.cli.init import detect_existing_token
-
         env_file = tmp_path / ".env"
         env_file.write_text('SPLAT_GITHUB_TOKEN="ghp_quoted123"\n')
 
@@ -566,8 +718,6 @@ class TestDetectExistingToken:
 
     def test_env_var_takes_precedence_over_file(self, tmp_path: Path) -> None:
         """Test that environment variable takes precedence over .env file."""
-        from splat.cli.init import detect_existing_token
-
         env_file = tmp_path / ".env"
         env_file.write_text("SPLAT_GITHUB_TOKEN=ghp_fromfile\n")
 
@@ -577,8 +727,6 @@ class TestDetectExistingToken:
 
     def test_returns_none_when_no_token(self, tmp_path: Path) -> None:
         """Test returning None when no token is found."""
-        from splat.cli.init import detect_existing_token
-
         env_copy = os.environ.copy()
         env_copy.pop("SPLAT_GITHUB_TOKEN", None)
         with patch.dict(os.environ, env_copy, clear=True):

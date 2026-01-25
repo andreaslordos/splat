@@ -28,7 +28,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-cli = ["click>=8.0.0"]
+cli = ["click>=8.0.0", "questionary>=2.0.0"]
 flask = ["flask>=2.0.0"]
 fastapi = ["fastapi>=0.100.0"]
 django = ["django>=4.0.0"]

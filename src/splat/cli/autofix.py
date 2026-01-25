@@ -45,9 +45,11 @@ def install_autofix_workflow(
     workflow_file.write_text(template)
 
     click.echo(f"Created {workflow_file}")
-    click.echo("\nNext steps:")
-    click.echo("1. Add ANTHROPIC_API_KEY to your repository secrets")
-    click.echo("2. Add 'auto-fix' to your splat labels config")
-    click.echo("3. Commit and push the workflow file")
+    click.echo("\nTo activate auto-fix:")
+    click.echo("1. Add ANTHROPIC_API_KEY to your repository secrets:")
+    click.echo(f"   https://github.com/YOUR_ORG/YOUR_REPO/settings/secrets/actions/new")
+    click.echo("2. Commit and push: git add . && git commit -m 'Add auto-fix workflow' && git push")
+    click.echo("\nThen label any issue with 'auto-fix' or mention @claude in comments.")
+    click.echo("\nTip: Run 'splat init' for a full interactive setup with more options.")
 
     return workflow_file
