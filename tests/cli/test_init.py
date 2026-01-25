@@ -9,6 +9,7 @@ from click.testing import CliRunner
 
 from splat.cli.init import (
     ProjectInfo,
+    detect_existing_token,
     detect_framework,
     detect_github_remote,
     detect_project_info,
@@ -217,6 +218,17 @@ class TestRunInitWizard:
         call_args_list = getattr(mock_echo, "call_args_list", [])
         return [call.args[0] for call in call_args_list if call.args]
 
+    @staticmethod
+    def _mock_prompt_side_effect(prompt_text: str, **kwargs) -> str:
+        """Handle different prompt calls in the wizard."""
+        if "Choose an option" in prompt_text:
+            return "3"  # Skip token setup
+        if "owner/repo" in prompt_text:
+            return "owner/repo"
+        if "token" in prompt_text.lower():
+            return ""  # Empty token
+        return "default"
+
     def test_wizard_with_python_flask_project(self, tmp_path: Path) -> None:
         """Test wizard output for Python Flask project."""
         # Setup Python project with Flask
@@ -231,23 +243,30 @@ class TestRunInitWizard:
 
         # Capture output
         with patch("splat.cli.init.click.echo") as mock_echo:
-            run_init_wizard(tmp_path)
+            with patch("splat.cli.init.click.prompt", side_effect=self._mock_prompt_side_effect):
+                with patch("splat.cli.init.click.confirm", return_value=True):
+                    with patch("splat.cli.init.update_pyproject_toml"):
+                        with patch("splat.cli.autofix.install_autofix_workflow"):
+                            run_init_wizard(tmp_path)
 
         # Verify outputs
         calls = self._get_echo_calls(mock_echo)
-        assert any("Python project detected" in call for call in calls)
-        assert any("Flask app in app.py" in call for call in calls)
-        assert any("GitHub remote: owner/repo" in call for call in calls)
+        assert any("Flask" in call and "app.py" in call for call in calls)
+        assert any("owner/repo" in call for call in calls)
+        assert any("Setup Complete!" in call for call in calls)
 
     def test_wizard_with_unknown_project(self, tmp_path: Path) -> None:
         """Test wizard output for unknown project type."""
         with patch("splat.cli.init.click.echo") as mock_echo:
-            run_init_wizard(tmp_path)
+            with patch("splat.cli.init.click.prompt", side_effect=self._mock_prompt_side_effect):
+                with patch("splat.cli.init.click.confirm", return_value=True):
+                    with patch("splat.cli.init.update_pyproject_toml"):
+                        with patch("splat.cli.autofix.install_autofix_workflow"):
+                            run_init_wizard(tmp_path)
 
         calls = self._get_echo_calls(mock_echo)
-        assert any("Could not detect project type" in call for call in calls)
-        assert any("No framework detected" in call for call in calls)
-        assert any("No GitHub remote detected" in call for call in calls)
+        # Verify wizard completed - shows manual error reporting instructions
+        assert any("report errors manually" in call for call in calls)
 
     def test_wizard_uses_cwd_when_no_path(self) -> None:
         """Test wizard defaults to current working directory."""
@@ -260,29 +279,37 @@ class TestRunInitWizard:
                         mock_fw.return_value = (None, None)
                         with patch("splat.cli.init.detect_github_remote") as mock_gh:
                             mock_gh.return_value = None
-                            run_init_wizard(None)
+                            with patch("splat.cli.init.detect_existing_token") as mock_token:
+                                mock_token.return_value = None
+                                with patch("splat.cli.init.click.prompt", side_effect=self._mock_prompt_side_effect):
+                                    with patch("splat.cli.init.click.confirm", return_value=False):
+                                        run_init_wizard(None)
 
                 mock_detect.assert_called_once_with(Path("/fake/path"))
 
     def test_wizard_shows_welcome_message(self, tmp_path: Path) -> None:
         """Test wizard shows welcome message."""
         with patch("splat.cli.init.click.echo") as mock_echo:
-            run_init_wizard(tmp_path)
+            with patch("splat.cli.init.click.prompt", side_effect=self._mock_prompt_side_effect):
+                with patch("splat.cli.init.click.confirm", return_value=False):
+                    run_init_wizard(tmp_path)
 
         calls = self._get_echo_calls(mock_echo)
         assert any("Welcome to Splat!" in call for call in calls)
         assert any("Detecting project..." in call for call in calls)
-        assert any("Full wizard coming soon!" in call for call in calls)
 
     def test_wizard_with_node_project(self, tmp_path: Path) -> None:
         """Test wizard output for Node.js project."""
         (tmp_path / "package.json").write_text('{"name": "test"}')
 
         with patch("splat.cli.init.click.echo") as mock_echo:
-            run_init_wizard(tmp_path)
+            with patch("splat.cli.init.click.prompt", side_effect=self._mock_prompt_side_effect):
+                with patch("splat.cli.init.click.confirm", return_value=False):
+                    run_init_wizard(tmp_path)
 
         calls = self._get_echo_calls(mock_echo)
-        assert any("Node project detected" in call for call in calls)
+        # Verify node project type detected
+        assert any("node" in call for call in calls)
 
     def test_wizard_with_fastapi_project(self, tmp_path: Path) -> None:
         """Test wizard output for FastAPI project."""
@@ -291,10 +318,14 @@ class TestRunInitWizard:
         main_file.write_text("from fastapi import FastAPI\napp = FastAPI()")
 
         with patch("splat.cli.init.click.echo") as mock_echo:
-            run_init_wizard(tmp_path)
+            with patch("splat.cli.init.click.confirm", return_value=True):
+                with patch("splat.cli.init.click.prompt", side_effect=self._mock_prompt_side_effect):
+                    with patch("splat.cli.init.update_pyproject_toml"):
+                        with patch("splat.cli.autofix.install_autofix_workflow"):
+                            run_init_wizard(tmp_path)
 
         calls = self._get_echo_calls(mock_echo)
-        assert any("Fastapi app in main.py" in call for call in calls)
+        assert any("Fastapi" in call and "main.py" in call for call in calls)
 
     def test_wizard_with_django_project(self, tmp_path: Path) -> None:
         """Test wizard output for Django project."""
@@ -305,10 +336,15 @@ class TestRunInitWizard:
         settings_file.write_text("INSTALLED_APPS = ['django.contrib.admin']")
 
         with patch("splat.cli.init.click.echo") as mock_echo:
-            run_init_wizard(tmp_path)
+            with patch("splat.cli.init.click.confirm", return_value=True):
+                with patch("splat.cli.init.click.prompt", side_effect=self._mock_prompt_side_effect):
+                    with patch("splat.cli.init.update_pyproject_toml"):
+                        with patch("splat.cli.autofix.install_autofix_workflow"):
+                            run_init_wizard(tmp_path)
 
         calls = self._get_echo_calls(mock_echo)
-        assert any("Django app in settings.py" in call for call in calls)
+        # It'll show Django app detected
+        assert any("Django" in call and "settings.py" in call for call in calls)
 
 
 class TestDetectFrameworkEdgeCases:
@@ -454,12 +490,25 @@ class TestRunInitWizardVercel:
         call_args_list = getattr(mock_echo, "call_args_list", [])
         return [call.args[0] for call in call_args_list if call.args]
 
+    @staticmethod
+    def _mock_prompt_side_effect(prompt_text: str, **kwargs) -> str:
+        """Handle different prompt calls in the wizard."""
+        if "Choose an option" in prompt_text:
+            return "3"  # Skip token setup
+        if "owner/repo" in prompt_text:
+            return "owner/repo"
+        if "token" in prompt_text.lower():
+            return ""
+        return "default"
+
     def test_wizard_shows_vercel_detected(self, tmp_path: Path) -> None:
         """Test wizard shows Vercel project detected message."""
         (tmp_path / "vercel.json").write_text('{"version": 2}')
 
         with patch("splat.cli.init.click.echo") as mock_echo:
-            run_init_wizard(tmp_path)
+            with patch("splat.cli.init.click.prompt", side_effect=self._mock_prompt_side_effect):
+                with patch("splat.cli.init.click.confirm", return_value=False):
+                    run_init_wizard(tmp_path)
 
         calls = self._get_echo_calls(mock_echo)
         assert any("Vercel project detected" in call for call in calls)
@@ -470,7 +519,196 @@ class TestRunInitWizardVercel:
         env_copy.pop("VERCEL", None)
         with patch.dict(os.environ, env_copy, clear=True):
             with patch("splat.cli.init.click.echo") as mock_echo:
-                run_init_wizard(tmp_path)
+                with patch("splat.cli.init.click.prompt", side_effect=self._mock_prompt_side_effect):
+                    with patch("splat.cli.init.click.confirm", return_value=False):
+                        run_init_wizard(tmp_path)
 
         calls = self._get_echo_calls(mock_echo)
         assert not any("Vercel project detected" in call for call in calls)
+
+
+class TestDetectExistingToken:
+    """Test existing token detection."""
+
+    def test_detects_token_from_env(self, tmp_path: Path) -> None:
+        """Test detecting token from environment variable."""
+        from splat.cli.init import detect_existing_token
+
+        with patch.dict(os.environ, {"SPLAT_GITHUB_TOKEN": "ghp_test123"}):
+            result = detect_existing_token(tmp_path)
+            assert result == "ghp_test123"
+
+    def test_detects_token_from_env_file(self, tmp_path: Path) -> None:
+        """Test detecting token from .env file."""
+        from splat.cli.init import detect_existing_token
+
+        env_file = tmp_path / ".env"
+        env_file.write_text("SPLAT_GITHUB_TOKEN=ghp_fromfile123\n")
+
+        env_copy = os.environ.copy()
+        env_copy.pop("SPLAT_GITHUB_TOKEN", None)
+        with patch.dict(os.environ, env_copy, clear=True):
+            result = detect_existing_token(tmp_path)
+            assert result == "ghp_fromfile123"
+
+    def test_detects_token_from_env_file_with_quotes(self, tmp_path: Path) -> None:
+        """Test detecting quoted token from .env file."""
+        from splat.cli.init import detect_existing_token
+
+        env_file = tmp_path / ".env"
+        env_file.write_text('SPLAT_GITHUB_TOKEN="ghp_quoted123"\n')
+
+        env_copy = os.environ.copy()
+        env_copy.pop("SPLAT_GITHUB_TOKEN", None)
+        with patch.dict(os.environ, env_copy, clear=True):
+            result = detect_existing_token(tmp_path)
+            assert result == "ghp_quoted123"
+
+    def test_env_var_takes_precedence_over_file(self, tmp_path: Path) -> None:
+        """Test that environment variable takes precedence over .env file."""
+        from splat.cli.init import detect_existing_token
+
+        env_file = tmp_path / ".env"
+        env_file.write_text("SPLAT_GITHUB_TOKEN=ghp_fromfile\n")
+
+        with patch.dict(os.environ, {"SPLAT_GITHUB_TOKEN": "ghp_fromenv"}):
+            result = detect_existing_token(tmp_path)
+            assert result == "ghp_fromenv"
+
+    def test_returns_none_when_no_token(self, tmp_path: Path) -> None:
+        """Test returning None when no token is found."""
+        from splat.cli.init import detect_existing_token
+
+        env_copy = os.environ.copy()
+        env_copy.pop("SPLAT_GITHUB_TOKEN", None)
+        with patch.dict(os.environ, env_copy, clear=True):
+            result = detect_existing_token(tmp_path)
+            assert result is None
+
+
+class TestValidateGithubToken:
+    """Test GitHub token validation."""
+
+    def test_validates_classic_token(self) -> None:
+        """Test validating classic personal access token."""
+        from splat.cli.init import validate_github_token
+
+        assert validate_github_token("ghp_abcdef123456") is True
+
+    def test_validates_fine_grained_token(self) -> None:
+        """Test validating fine-grained personal access token."""
+        from splat.cli.init import validate_github_token
+
+        assert validate_github_token("github_pat_abcdef123456") is True
+
+    def test_validates_oauth_token(self) -> None:
+        """Test validating OAuth token."""
+        from splat.cli.init import validate_github_token
+
+        assert validate_github_token("gho_abcdef123456") is True
+
+    def test_rejects_invalid_prefix(self) -> None:
+        """Test rejecting token with invalid prefix."""
+        from splat.cli.init import validate_github_token
+
+        assert validate_github_token("invalid_token123") is False
+
+    def test_rejects_short_token(self) -> None:
+        """Test rejecting too short token."""
+        from splat.cli.init import validate_github_token
+
+        assert validate_github_token("ghp_abc") is False
+
+
+class TestSaveTokenToEnv:
+    """Test saving token to .env file."""
+
+    def test_creates_env_file_if_not_exists(self, tmp_path: Path) -> None:
+        """Test creating .env file if it doesn't exist."""
+        from splat.cli.init import save_token_to_env
+
+        save_token_to_env(tmp_path, "ghp_newtoken123")
+
+        env_file = tmp_path / ".env"
+        assert env_file.exists()
+        assert "SPLAT_GITHUB_TOKEN=ghp_newtoken123" in env_file.read_text()
+
+    def test_appends_to_existing_env_file(self, tmp_path: Path) -> None:
+        """Test appending to existing .env file."""
+        from splat.cli.init import save_token_to_env
+
+        env_file = tmp_path / ".env"
+        env_file.write_text("OTHER_VAR=value\n")
+
+        save_token_to_env(tmp_path, "ghp_newtoken123")
+
+        content = env_file.read_text()
+        assert "OTHER_VAR=value" in content
+        assert "SPLAT_GITHUB_TOKEN=ghp_newtoken123" in content
+
+    def test_replaces_existing_token(self, tmp_path: Path) -> None:
+        """Test replacing existing token in .env file."""
+        from splat.cli.init import save_token_to_env
+
+        env_file = tmp_path / ".env"
+        env_file.write_text("SPLAT_GITHUB_TOKEN=ghp_oldtoken\nOTHER=value\n")
+
+        save_token_to_env(tmp_path, "ghp_newtoken123")
+
+        content = env_file.read_text()
+        assert "ghp_oldtoken" not in content
+        assert "SPLAT_GITHUB_TOKEN=ghp_newtoken123" in content
+        assert "OTHER=value" in content
+
+
+class TestEnsureEnvInGitignore:
+    """Test ensuring .env is in .gitignore."""
+
+    def test_creates_gitignore_if_not_exists(self, tmp_path: Path) -> None:
+        """Test creating .gitignore if it doesn't exist."""
+        from splat.cli.init import ensure_env_in_gitignore
+
+        result = ensure_env_in_gitignore(tmp_path)
+
+        assert result is True
+        gitignore = tmp_path / ".gitignore"
+        assert gitignore.exists()
+        assert ".env" in gitignore.read_text()
+
+    def test_adds_env_to_existing_gitignore(self, tmp_path: Path) -> None:
+        """Test adding .env to existing .gitignore."""
+        from splat.cli.init import ensure_env_in_gitignore
+
+        gitignore = tmp_path / ".gitignore"
+        gitignore.write_text("*.pyc\n__pycache__/\n")
+
+        result = ensure_env_in_gitignore(tmp_path)
+
+        assert result is True
+        content = gitignore.read_text()
+        assert ".env" in content
+        assert "*.pyc" in content
+
+    def test_does_not_duplicate_env(self, tmp_path: Path) -> None:
+        """Test not adding .env if already in .gitignore."""
+        from splat.cli.init import ensure_env_in_gitignore
+
+        gitignore = tmp_path / ".gitignore"
+        gitignore.write_text("*.pyc\n.env\n")
+
+        result = ensure_env_in_gitignore(tmp_path)
+
+        assert result is False
+        content = gitignore.read_text()
+        assert content.count(".env") == 1
+
+    def test_recognizes_env_patterns(self, tmp_path: Path) -> None:
+        """Test recognizing .env patterns like *.env."""
+        from splat.cli.init import ensure_env_in_gitignore
+
+        gitignore = tmp_path / ".gitignore"
+        gitignore.write_text("*.env\n")
+
+        result = ensure_env_in_gitignore(tmp_path)
+
+        assert result is False
