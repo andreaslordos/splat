@@ -1,5 +1,6 @@
 """Tests for init wizard."""
 
+import os
 from pathlib import Path
 from unittest.mock import patch
 
@@ -10,7 +11,9 @@ from splat.cli.init import (
     ProjectInfo,
     detect_framework,
     detect_github_remote,
+    detect_project_info,
     detect_project_type,
+    detect_vercel_project,
     run_init_wizard,
 )
 
@@ -180,6 +183,29 @@ class TestProjectInfo:
         assert info.framework_file is None
         assert info.github_repo is None
 
+    def test_project_info_is_vercel_default_false(self, tmp_path: Path) -> None:
+        """Test that is_vercel defaults to False."""
+        info = ProjectInfo(
+            project_type="python",
+            framework=None,
+            framework_file=None,
+            github_repo=None,
+            base_path=tmp_path,
+        )
+        assert info.is_vercel is False
+
+    def test_project_info_is_vercel_can_be_set_true(self, tmp_path: Path) -> None:
+        """Test that is_vercel can be set to True."""
+        info = ProjectInfo(
+            project_type="python",
+            framework=None,
+            framework_file=None,
+            github_repo=None,
+            base_path=tmp_path,
+            is_vercel=True,
+        )
+        assert info.is_vercel is True
+
 
 class TestRunInitWizard:
     """Test run_init_wizard function."""
@@ -313,3 +339,138 @@ class TestDetectGithubRemoteEdgeCases:
 
         result = detect_github_remote(tmp_path)
         assert result is None
+
+
+class TestDetectVercelProject:
+    """Test Vercel project detection."""
+
+    def test_detects_vercel_json(self, tmp_path: Path) -> None:
+        """Test detect_vercel_project returns True for vercel.json."""
+        (tmp_path / "vercel.json").write_text('{"version": 2}')
+        result = detect_vercel_project(tmp_path)
+        assert result is True
+
+    def test_detects_vercel_directory(self, tmp_path: Path) -> None:
+        """Test detect_vercel_project returns True for .vercel directory."""
+        (tmp_path / ".vercel").mkdir()
+        result = detect_vercel_project(tmp_path)
+        assert result is True
+
+    def test_detects_vercel_env_var(self, tmp_path: Path) -> None:
+        """Test detect_vercel_project returns True for VERCEL env var."""
+        with patch.dict(os.environ, {"VERCEL": "1"}):
+            result = detect_vercel_project(tmp_path)
+        assert result is True
+
+    def test_returns_false_when_none_present(self, tmp_path: Path) -> None:
+        """Test detect_vercel_project returns False when no Vercel indicators."""
+        # Ensure VERCEL env var is not set
+        with patch.dict(os.environ, {}, clear=True):
+            # Remove VERCEL if it exists
+            env_copy = os.environ.copy()
+            env_copy.pop("VERCEL", None)
+            with patch.dict(os.environ, env_copy, clear=True):
+                result = detect_vercel_project(tmp_path)
+        assert result is False
+
+    def test_returns_true_with_empty_vercel_json(self, tmp_path: Path) -> None:
+        """Test detect_vercel_project returns True even if vercel.json is empty."""
+        (tmp_path / "vercel.json").write_text("")
+        result = detect_vercel_project(tmp_path)
+        assert result is True
+
+    def test_detects_vercel_env_var_any_value(self, tmp_path: Path) -> None:
+        """Test detect_vercel_project returns True for any VERCEL env var value."""
+        with patch.dict(os.environ, {"VERCEL": "true"}):
+            result = detect_vercel_project(tmp_path)
+        assert result is True
+
+
+class TestDetectProjectInfo:
+    """Test detect_project_info function."""
+
+    def test_combines_all_detection(self, tmp_path: Path) -> None:
+        """Test detect_project_info combines all detection methods."""
+        # Setup Python project with Flask, GitHub, and Vercel
+        (tmp_path / "pyproject.toml").write_text("[project]\nname = 'test'")
+        app_file = tmp_path / "app.py"
+        app_file.write_text("from flask import Flask\napp = Flask(__name__)")
+        git_dir = tmp_path / ".git"
+        git_dir.mkdir()
+        (git_dir / "config").write_text(
+            '[remote "origin"]\n    url = https://github.com/owner/repo.git'
+        )
+        (tmp_path / "vercel.json").write_text('{"version": 2}')
+
+        info = detect_project_info(tmp_path)
+
+        assert info.project_type == "python"
+        assert info.framework == "flask"
+        assert info.framework_file == app_file
+        assert info.github_repo == "owner/repo"
+        assert info.base_path == tmp_path
+        assert info.is_vercel is True
+
+    def test_returns_project_info_without_vercel(self, tmp_path: Path) -> None:
+        """Test detect_project_info when Vercel is not present."""
+        (tmp_path / "pyproject.toml").write_text("[project]\nname = 'test'")
+
+        # Ensure VERCEL env var is not set
+        env_copy = os.environ.copy()
+        env_copy.pop("VERCEL", None)
+        with patch.dict(os.environ, env_copy, clear=True):
+            info = detect_project_info(tmp_path)
+
+        assert info.project_type == "python"
+        assert info.is_vercel is False
+
+    def test_returns_project_info_with_vercel_env_only(self, tmp_path: Path) -> None:
+        """Test detect_project_info detects Vercel from env var only."""
+        with patch.dict(os.environ, {"VERCEL": "1"}):
+            info = detect_project_info(tmp_path)
+
+        assert info.is_vercel is True
+
+    def test_returns_unknown_project_type(self, tmp_path: Path) -> None:
+        """Test detect_project_info with unknown project type."""
+        env_copy = os.environ.copy()
+        env_copy.pop("VERCEL", None)
+        with patch.dict(os.environ, env_copy, clear=True):
+            info = detect_project_info(tmp_path)
+
+        assert info.project_type == "unknown"
+        assert info.framework is None
+        assert info.framework_file is None
+        assert info.github_repo is None
+        assert info.is_vercel is False
+
+
+class TestRunInitWizardVercel:
+    """Test run_init_wizard Vercel-related output."""
+
+    @staticmethod
+    def _get_echo_calls(mock_echo: object) -> list[str]:
+        """Extract string arguments from mock echo calls, skipping empty calls."""
+        call_args_list = getattr(mock_echo, "call_args_list", [])
+        return [call.args[0] for call in call_args_list if call.args]
+
+    def test_wizard_shows_vercel_detected(self, tmp_path: Path) -> None:
+        """Test wizard shows Vercel project detected message."""
+        (tmp_path / "vercel.json").write_text('{"version": 2}')
+
+        with patch("splat.cli.init.click.echo") as mock_echo:
+            run_init_wizard(tmp_path)
+
+        calls = self._get_echo_calls(mock_echo)
+        assert any("Vercel project detected" in call for call in calls)
+
+    def test_wizard_does_not_show_vercel_when_not_present(self, tmp_path: Path) -> None:
+        """Test wizard does not show Vercel message when not a Vercel project."""
+        env_copy = os.environ.copy()
+        env_copy.pop("VERCEL", None)
+        with patch.dict(os.environ, env_copy, clear=True):
+            with patch("splat.cli.init.click.echo") as mock_echo:
+                run_init_wizard(tmp_path)
+
+        calls = self._get_echo_calls(mock_echo)
+        assert not any("Vercel project detected" in call for call in calls)

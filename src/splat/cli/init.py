@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+import os
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Tuple
 
@@ -19,6 +20,7 @@ class ProjectInfo:
     framework_file: Path | None
     github_repo: str | None
     base_path: Path
+    is_vercel: bool = field(default=False)
 
 
 def detect_project_type(base_path: Path) -> str:
@@ -93,6 +95,43 @@ def detect_github_remote(base_path: Path) -> str | None:
     return None
 
 
+def detect_vercel_project(base_path: Path) -> bool:
+    """Detect if the project is a Vercel project.
+
+    Returns True if any of these exist:
+    - vercel.json file
+    - .vercel/ directory
+    - VERCEL environment variable is set
+    """
+    if (base_path / "vercel.json").exists():
+        return True
+    if (base_path / ".vercel").is_dir():
+        return True
+    if os.environ.get("VERCEL") is not None:
+        return True
+    return False
+
+
+def detect_project_info(base_path: Path) -> ProjectInfo:
+    """Detect all project information.
+
+    Combines all detection methods to return a populated ProjectInfo.
+    """
+    project_type = detect_project_type(base_path)
+    framework, framework_file = detect_framework(base_path)
+    github_repo = detect_github_remote(base_path)
+    is_vercel = detect_vercel_project(base_path)
+
+    return ProjectInfo(
+        project_type=project_type,
+        framework=framework,
+        framework_file=framework_file,
+        github_repo=github_repo,
+        base_path=base_path,
+        is_vercel=is_vercel,
+    )
+
+
 def run_init_wizard(base_path: Path | None = None) -> None:
     """Run the interactive setup wizard."""
     if base_path is None:
@@ -101,27 +140,28 @@ def run_init_wizard(base_path: Path | None = None) -> None:
     click.echo("\nWelcome to Splat!\n")
     click.echo("Detecting project...")
 
-    project_type = detect_project_type(base_path)
-    framework, framework_file = detect_framework(base_path)
-    github_repo = detect_github_remote(base_path)
+    info = detect_project_info(base_path)
 
-    if project_type != "unknown":
-        click.echo(f"  - {project_type.title()} project detected")
+    if info.project_type != "unknown":
+        click.echo(f"  - {info.project_type.title()} project detected")
     else:
         click.echo("  - Could not detect project type")
 
-    if framework:
+    if info.framework:
         click.echo(
-            f"  - {framework.title()} app in "
-            f"{framework_file.name if framework_file else 'unknown'}"
+            f"  - {info.framework.title()} app in "
+            f"{info.framework_file.name if info.framework_file else 'unknown'}"
         )
     else:
         click.echo("  - No framework detected")
 
-    if github_repo:
-        click.echo(f"  - GitHub remote: {github_repo}")
+    if info.github_repo:
+        click.echo(f"  - GitHub remote: {info.github_repo}")
     else:
         click.echo("  - No GitHub remote detected")
+
+    if info.is_vercel:
+        click.echo("  - Vercel project detected")
 
     click.echo()
     click.echo("Full wizard coming soon!")
