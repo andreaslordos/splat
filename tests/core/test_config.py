@@ -35,29 +35,34 @@ class TestLoadConfigFromEnv:
     """Test loading config from environment variables."""
 
     def test_load_config_reads_repo_from_env(self) -> None:
-        with patch.dict(os.environ, {"SPLAT_GITHUB_REPO": "owner/repo"}):
-            config = load_config()
-            assert config.repo == "owner/repo"
+        with patch("splat.core.config._find_pyproject", return_value=None):
+            with patch.dict(os.environ, {"SPLAT_GITHUB_REPO": "owner/repo"}):
+                config = load_config()
+                assert config.repo == "owner/repo"
 
     def test_load_config_reads_token_from_env(self) -> None:
-        with patch.dict(os.environ, {"SPLAT_GITHUB_TOKEN": "ghp_test123"}):
-            config = load_config()
-            assert config.token == "ghp_test123"
+        with patch("splat.core.config._find_pyproject", return_value=None):
+            with patch.dict(os.environ, {"SPLAT_GITHUB_TOKEN": "ghp_test123"}):
+                config = load_config()
+                assert config.token == "ghp_test123"
 
     def test_load_config_reads_enabled_from_env(self) -> None:
-        with patch.dict(os.environ, {"SPLAT_ENABLED": "false"}):
-            config = load_config()
-            assert config.enabled is False
+        with patch("splat.core.config._find_pyproject", return_value=None):
+            with patch.dict(os.environ, {"SPLAT_ENABLED": "false"}):
+                config = load_config()
+                assert config.enabled is False
 
     def test_load_config_reads_log_buffer_size_from_env(self) -> None:
-        with patch.dict(os.environ, {"SPLAT_LOG_BUFFER_SIZE": "500"}):
-            config = load_config()
-            assert config.log_buffer_size == 500
+        with patch("splat.core.config._find_pyproject", return_value=None):
+            with patch.dict(os.environ, {"SPLAT_LOG_BUFFER_SIZE": "500"}):
+                config = load_config()
+                assert config.log_buffer_size == 500
 
     def test_load_config_reads_labels_from_env(self) -> None:
-        with patch.dict(os.environ, {"SPLAT_LABELS": "bug,splat,auto-fix"}):
-            config = load_config()
-            assert config.labels == ["bug", "splat", "auto-fix"]
+        with patch("splat.core.config._find_pyproject", return_value=None):
+            with patch.dict(os.environ, {"SPLAT_LABELS": "bug,splat,auto-fix"}):
+                config = load_config()
+                assert config.labels == ["bug", "splat", "auto-fix"]
 
 
 class TestLoadConfigFromToml:

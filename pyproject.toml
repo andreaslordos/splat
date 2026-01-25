@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "py-splat"
-version = "0.1.1"
+version = "0.1.2"
 description = "Automatic GitHub issue creation + PR fix on runtime errors"
 readme = "README.md"
 requires-python = ">=3.9"
@@ -99,3 +99,7 @@ omit = ["*/tests/*", "*/cli/init.py"]
 
 [tool.coverage.report]
 fail_under = 80
+
+[tool.splat]
+repo = "andreaslordos/splat"
+labels = ["bug", "splat", "auto-fix"]

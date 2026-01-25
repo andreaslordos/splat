@@ -19,16 +19,17 @@ class TestSplatInit:
         assert splat.config.token == "ghp_test"
 
     def test_init_loads_from_env(self) -> None:
-        with patch.dict(
-            os.environ,
-            {
-                "SPLAT_GITHUB_REPO": "env/repo",
-                "SPLAT_GITHUB_TOKEN": "ghp_env",
-            },
-        ):
-            splat = Splat()
-            assert splat.config.repo == "env/repo"
-            assert splat.config.token == "ghp_env"
+        with patch("splat.core.config._find_pyproject", return_value=None):
+            with patch.dict(
+                os.environ,
+                {
+                    "SPLAT_GITHUB_REPO": "env/repo",
+                    "SPLAT_GITHUB_TOKEN": "ghp_env",
+                },
+            ):
+                splat = Splat()
+                assert splat.config.repo == "env/repo"
+                assert splat.config.token == "ghp_env"
 
     def test_init_installs_log_buffer(self) -> None:
         splat = Splat(repo="owner/repo", token="ghp_test")
@@ -43,8 +44,9 @@ class TestSplatEnabled:
         assert splat.is_enabled() is True
 
     def test_is_disabled_when_missing_repo(self) -> None:
-        splat = Splat(token="ghp_test")
-        assert splat.is_enabled() is False
+        with patch("splat.core.config._find_pyproject", return_value=None):
+            splat = Splat(token="ghp_test")
+            assert splat.is_enabled() is False
 
     def test_is_disabled_when_missing_token(self) -> None:
         splat = Splat(repo="owner/repo")
