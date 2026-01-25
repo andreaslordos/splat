@@ -23,6 +23,10 @@ class SplatConfig:
     enabled: bool = True
     log_buffer_size: int = 200
     labels: list[str] = field(default_factory=lambda: ["bug", "splat"])
+    # Vercel Log Drain settings
+    vercel_secret: str | None = None
+    vercel_webhook_path: str = "/splat/logs"
+    vercel_log_ttl: int = 60
 
 
 def _find_pyproject() -> Path | None:
@@ -54,6 +58,16 @@ def _load_from_env() -> dict[str, Any]:
     if labels := os.environ.get("SPLAT_LABELS"):
         config["labels"] = [label.strip() for label in labels.split(",")]
 
+    # Vercel settings
+    if vercel_secret := os.environ.get("SPLAT_VERCEL_SECRET"):
+        config["vercel_secret"] = vercel_secret
+
+    if vercel_webhook_path := os.environ.get("SPLAT_VERCEL_WEBHOOK_PATH"):
+        config["vercel_webhook_path"] = vercel_webhook_path
+
+    if vercel_log_ttl := os.environ.get("SPLAT_VERCEL_LOG_TTL"):
+        config["vercel_log_ttl"] = int(vercel_log_ttl)
+
     return config
 
 
@@ -81,6 +95,9 @@ def load_config(
     enabled: bool | None = None,
     log_buffer_size: int | None = None,
     labels: list[str] | None = None,
+    vercel_secret: str | None = None,
+    vercel_webhook_path: str | None = None,
+    vercel_log_ttl: int | None = None,
 ) -> SplatConfig:
     """
     Load configuration with precedence: programmatic > toml > env > defaults.
@@ -91,6 +108,9 @@ def load_config(
         enabled: Whether error reporting is enabled
         log_buffer_size: Number of log entries to buffer
         labels: Labels to apply to created issues
+        vercel_secret: Webhook secret for Vercel Log Drain signature verification
+        vercel_webhook_path: Webhook endpoint path for Vercel logs
+        vercel_log_ttl: TTL in seconds for how long to keep logs in memory
 
     Returns:
         SplatConfig with merged values
@@ -110,6 +130,12 @@ def load_config(
         config.log_buffer_size = env_config["log_buffer_size"]
     if "labels" in env_config:
         config.labels = env_config["labels"]
+    if "vercel_secret" in env_config:
+        config.vercel_secret = env_config["vercel_secret"]
+    if "vercel_webhook_path" in env_config:
+        config.vercel_webhook_path = env_config["vercel_webhook_path"]
+    if "vercel_log_ttl" in env_config:
+        config.vercel_log_ttl = env_config["vercel_log_ttl"]
 
     # Layer 2: pyproject.toml
     if pyproject := _find_pyproject():
@@ -124,6 +150,12 @@ def load_config(
             config.log_buffer_size = toml_config["log_buffer_size"]
         if "labels" in toml_config:
             config.labels = toml_config["labels"]
+        if "vercel_secret" in toml_config:
+            config.vercel_secret = toml_config["vercel_secret"]
+        if "vercel_webhook_path" in toml_config:
+            config.vercel_webhook_path = toml_config["vercel_webhook_path"]
+        if "vercel_log_ttl" in toml_config:
+            config.vercel_log_ttl = toml_config["vercel_log_ttl"]
 
     # Layer 3: Programmatic overrides (highest priority)
     if repo is not None:
@@ -136,5 +168,11 @@ def load_config(
         config.log_buffer_size = log_buffer_size
     if labels is not None:
         config.labels = labels
+    if vercel_secret is not None:
+        config.vercel_secret = vercel_secret
+    if vercel_webhook_path is not None:
+        config.vercel_webhook_path = vercel_webhook_path
+    if vercel_log_ttl is not None:
+        config.vercel_log_ttl = vercel_log_ttl
 
     return config
