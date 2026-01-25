@@ -2,9 +2,7 @@
 
 import logging
 
-import pytest
-
-from splat.core.log_buffer import LogBuffer, install_log_buffer, get_recent_logs
+from splat.core.log_buffer import LogBuffer, get_recent_logs, install_log_buffer
 
 
 class TestLogBuffer:

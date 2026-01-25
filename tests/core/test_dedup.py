@@ -2,11 +2,11 @@
 
 from urllib.parse import unquote
 
-import pytest
 import httpx
+import pytest
 import respx
 
-from splat.core.dedup import generate_signature, check_duplicate
+from splat.core.dedup import check_duplicate, generate_signature
 
 
 class TestGenerateSignature:

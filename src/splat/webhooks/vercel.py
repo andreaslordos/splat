@@ -1,7 +1,7 @@
 """Vercel webhook signature verification and log parsing."""
 
-import hmac
 import hashlib
+import hmac
 import json
 from typing import Any
 
@@ -21,9 +21,7 @@ def verify_signature(body: bytes, secret: str, signature: str | None) -> bool:
     if not signature:
         return False
 
-    expected_signature = hmac.new(
-        secret.encode(), body, hashlib.sha1
-    ).hexdigest()
+    expected_signature = hmac.new(secret.encode(), body, hashlib.sha1).hexdigest()
 
     return hmac.compare_digest(expected_signature, signature)
 
@@ -74,9 +72,6 @@ def parse_logs(body: bytes, filter_sources: bool = True) -> list[dict[str, Any]]
             return []
 
     if filter_sources:
-        logs = [
-            log for log in logs
-            if log.get("source") in ("lambda", "edge")
-        ]
+        logs = [log for log in logs if log.get("source") in ("lambda", "edge")]
 
     return logs

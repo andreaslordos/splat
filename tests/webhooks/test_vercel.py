@@ -1,12 +1,10 @@
 """Tests for Vercel webhook signature verification and log parsing."""
 
-import hmac
 import hashlib
+import hmac
 import json
 
-import pytest
-
-from splat.webhooks.vercel import verify_signature, parse_logs
+from splat.webhooks.vercel import parse_logs, verify_signature
 
 
 class TestVerifySignature:
@@ -17,9 +15,7 @@ class TestVerifySignature:
         body = b'{"test": "data"}'
         secret = "test_secret"
         # Generate valid signature
-        expected_sig = hmac.new(
-            secret.encode(), body, hashlib.sha1
-        ).hexdigest()
+        expected_sig = hmac.new(secret.encode(), body, hashlib.sha1).hexdigest()
 
         result = verify_signature(body, secret, expected_sig)
 
@@ -262,9 +258,7 @@ class TestParseLogs:
             {"message": "log2", "source": "edge"},
         ]
         # NDJSON with empty lines
-        body = (
-            json.dumps(logs[0]) + "\n\n" + json.dumps(logs[1]) + "\n"
-        ).encode()
+        body = (json.dumps(logs[0]) + "\n\n" + json.dumps(logs[1]) + "\n").encode()
 
         result = parse_logs(body, filter_sources=False)
 
@@ -297,13 +291,13 @@ class TestParseLogs:
         assert result == []
 
         # JSON number
-        result = parse_logs(b'123')
+        result = parse_logs(b"123")
         assert result == []
 
         # JSON boolean
-        result = parse_logs(b'true')
+        result = parse_logs(b"true")
         assert result == []
 
         # JSON null
-        result = parse_logs(b'null')
+        result = parse_logs(b"null")
         assert result == []

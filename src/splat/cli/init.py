@@ -10,40 +10,40 @@ import subprocess
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Tuple, TypeVar
+from typing import Any, Tuple
 
 import click
 import questionary
 from questionary import Style
 
 # Custom style for questionary prompts
-CUSTOM_STYLE = Style([
-    ('qmark', 'fg:cyan bold'),
-    ('question', 'bold'),
-    ('answer', 'fg:cyan'),
-    ('pointer', 'fg:magenta bold'),
-    ('highlighted', 'fg:magenta bold'),
-    ('selected', 'fg:green'),
-    ('separator', 'fg:gray'),
-    ('instruction', 'fg:gray'),
-])
+CUSTOM_STYLE = Style(
+    [
+        ("qmark", "fg:cyan bold"),
+        ("question", "bold"),
+        ("answer", "fg:cyan"),
+        ("pointer", "fg:magenta bold"),
+        ("highlighted", "fg:magenta bold"),
+        ("selected", "fg:green"),
+        ("separator", "fg:gray"),
+        ("instruction", "fg:gray"),
+    ]
+)
 
 
-class UserCancelled(Exception):
+class UserCancelledError(Exception):
     """Raised when user cancels the wizard with Ctrl+C."""
 
     pass
 
 
-T = TypeVar("T")
-
-
-def ask(question: questionary.Question) -> T:
+def ask(question: questionary.Question) -> Any:
     """Wrapper for questionary.ask() that raises on Ctrl+C cancellation."""
-    result = question.ask()
+    result: Any = question.ask()
     if result is None:
-        raise UserCancelled()
+        raise UserCancelledError()
     return result
+
 
 # GitHub token generation URL with pre-filled scopes
 GITHUB_TOKEN_URL = "https://github.com/settings/tokens/new?scopes=repo&description=Splat%20Error%20Reporter"
@@ -142,9 +142,7 @@ def detect_github_remote(base_path: Path) -> str | None:
             repo = repo.removesuffix(".git")
             return f"{owner}/{repo}"
 
-        ssh_match = re.search(
-            r"url\s*=\s*git@github\.com:([^/]+)/([^/\s]+)", content
-        )
+        ssh_match = re.search(r"url\s*=\s*git@github\.com:([^/]+)/([^/\s]+)", content)
         if ssh_match:
             owner, repo = ssh_match.groups()
             repo = repo.removesuffix(".git")
@@ -368,12 +366,15 @@ def update_pyproject_toml(base_path: Path, config: dict[str, Any]) -> None:
 # CLI Tool Helpers
 # ============================================================================
 
+
 def check_cli_exists(cmd: str) -> bool:
     """Check if a CLI tool exists."""
     return shutil.which(cmd) is not None
 
 
-def run_command(args: list[str], capture: bool = True, input_text: str | None = None) -> tuple[bool, str]:
+def run_command(
+    args: list[str], capture: bool = True, input_text: str | None = None
+) -> tuple[bool, str]:
     """Run a command and return (success, output)."""
     try:
         result = subprocess.run(
@@ -441,6 +442,7 @@ def add_vercel_env(name: str, value: str) -> bool:
 # AST-Based Middleware Injection
 # ============================================================================
 
+
 def find_top_level_import_block_end(tree: ast.Module) -> int:
     """Find the last line of the top-level import block.
 
@@ -452,7 +454,7 @@ def find_top_level_import_block_end(tree: ast.Module) -> int:
     for node in tree.body:
         if isinstance(node, (ast.Import, ast.ImportFrom)):
             # Track the end line (for multi-line imports)
-            end_line = getattr(node, 'end_lineno', node.lineno)
+            end_line = getattr(node, "end_lineno", node.lineno)
             last_import_line = max(last_import_line, end_line)
         elif isinstance(node, ast.Expr) and isinstance(node.value, ast.Constant):
             # Allow docstrings (string expressions) - they can appear after imports
@@ -478,18 +480,18 @@ class AppFinder(ast.NodeVisitor):
         self.has_splat_import: bool = False
         self.has_middleware: bool = False
 
-    def visit_Import(self, node: ast.Import) -> None:
+    def visit_Import(self, node: ast.Import) -> None:  # noqa: N802
         for alias in node.names:
             if "splat" in alias.name:
                 self.has_splat_import = True
         self.generic_visit(node)
 
-    def visit_ImportFrom(self, node: ast.ImportFrom) -> None:
+    def visit_ImportFrom(self, node: ast.ImportFrom) -> None:  # noqa: N802
         if node.module and "splat" in node.module:
             self.has_splat_import = True
         self.generic_visit(node)
 
-    def visit_Assign(self, node: ast.Assign) -> None:
+    def visit_Assign(self, node: ast.Assign) -> None:  # noqa: N802
         # Look for app = FastAPI() or app = Flask(__name__)
         if isinstance(node.value, ast.Call):
             func = node.value.func
@@ -505,11 +507,11 @@ class AppFinder(ast.NodeVisitor):
                 if node.targets and isinstance(node.targets[0], ast.Name):
                     self.app_name = node.targets[0].id
                     self.app_line = node.lineno
-                    self.app_end_line = getattr(node, 'end_lineno', node.lineno)
+                    self.app_end_line = getattr(node, "end_lineno", node.lineno)
 
         self.generic_visit(node)
 
-    def visit_Expr(self, node: ast.Expr) -> None:
+    def visit_Expr(self, node: ast.Expr) -> None:  # noqa: N802
         # Look for app.add_middleware(SplatMiddleware)
         if isinstance(node.value, ast.Call):
             call = node.value
@@ -602,20 +604,24 @@ def generate_injection_preview(
         for i in range(start, import_line):
             line_num = i + 1
             line_content = file_lines[i] if i < len(file_lines) else ""
-            output_parts.append(click.style(f"  {line_num:4d} │ ", fg="bright_black") + line_content)
+            output_parts.append(
+                click.style(f"  {line_num:4d} │ ", fg="bright_black") + line_content
+            )
 
         # Show the new import line
         new_line_num = import_line + 1
         output_parts.append(
-            click.style(f"  {new_line_num:4d} │ ", fg="green") +
-            click.style(f"+ {import_stmt}", fg="green", bold=True)
+            click.style(f"  {new_line_num:4d} │ ", fg="green")
+            + click.style(f"+ {import_stmt}", fg="green", bold=True)
         )
 
         # Show 2 lines after insertion point
         for i in range(import_line, min(import_line + 2, len(file_lines))):
             line_num = i + 2  # +2 because we inserted a line
             line_content = file_lines[i]
-            output_parts.append(click.style(f"  {line_num:4d} │ ", fg="bright_black") + line_content)
+            output_parts.append(
+                click.style(f"  {line_num:4d} │ ", fg="bright_black") + line_content
+            )
 
         output_parts.append("")
 
@@ -628,30 +634,43 @@ def generate_injection_preview(
     for i in range(start, analysis["app_line"] - 1):
         line_num = i + 1
         line_content = file_lines[i] if i < len(file_lines) else ""
-        output_parts.append(click.style(f"  {line_num:4d} │ ", fg="bright_black") + line_content)
+        output_parts.append(
+            click.style(f"  {line_num:4d} │ ", fg="bright_black") + line_content
+        )
 
     # Show the app instantiation line
-    app_line_content = file_lines[analysis["app_line"] - 1] if analysis["app_line"] - 1 < len(file_lines) else ""
-    output_parts.append(click.style(f"  {analysis['app_line']:4d} │ ", fg="cyan") + click.style(app_line_content, fg="cyan"))
+    app_line_content = (
+        file_lines[analysis["app_line"] - 1]
+        if analysis["app_line"] - 1 < len(file_lines)
+        else ""
+    )
+    output_parts.append(
+        click.style(f"  {analysis['app_line']:4d} │ ", fg="cyan")
+        + click.style(app_line_content, fg="cyan")
+    )
 
     # Show the new middleware lines
     for idx, stmt in enumerate(middleware_stmts):
         new_line_num = app_end_line + 1 + idx
         output_parts.append(
-            click.style(f"  {new_line_num:4d} │ ", fg="green") +
-            click.style(f"+ {stmt}", fg="green", bold=True)
+            click.style(f"  {new_line_num:4d} │ ", fg="green")
+            + click.style(f"+ {stmt}", fg="green", bold=True)
         )
 
     # Show 2 lines after app instantiation
     for i in range(app_end_line, min(app_end_line + 2, len(file_lines))):
         line_num = i + 1 + len(middleware_stmts)  # Account for inserted lines
         line_content = file_lines[i]
-        output_parts.append(click.style(f"  {line_num:4d} │ ", fg="bright_black") + line_content)
+        output_parts.append(
+            click.style(f"  {line_num:4d} │ ", fg="bright_black") + line_content
+        )
 
     return "\n".join(output_parts)
 
 
-def inject_middleware(file_path: Path, framework: str, analysis: dict[str, Any]) -> bool:
+def inject_middleware(
+    file_path: Path, framework: str, analysis: dict[str, Any]
+) -> bool:
     """Inject middleware into the framework file."""
     if analysis.get("error") or analysis["has_middleware"]:
         return False
@@ -692,6 +711,7 @@ def inject_middleware(file_path: Path, framework: str, analysis: dict[str, Any])
 # ============================================================================
 # Workflow Template Generation
 # ============================================================================
+
 
 def get_workflow_template(
     auth_type: str,
@@ -797,7 +817,8 @@ print("✓ Bug fix verified")
 """
 
     # Build the full prompt
-    prompt = f"""You are fixing a bug reported in this GitHub issue. Follow these three skills in order:
+    prompt = f"""You are fixing a bug reported in this GitHub issue. \
+Follow these three skills in order:
 
 ===============================================================================
 SKILL 1: SYSTEMATIC DEBUGGING
@@ -833,7 +854,9 @@ Remember: NO FIXES WITHOUT ROOT CAUSE INVESTIGATION FIRST.
     # Escape the prompt for YAML (use literal block scalar)
     # We'll use the | style with proper indentation
     prompt_lines = prompt.split("\n")
-    indented_prompt = "\n".join("            " + line if line else "" for line in prompt_lines)
+    indented_prompt = "\n".join(
+        "            " + line if line else "" for line in prompt_lines
+    )
 
     workflow = f"""name: Splat Auto-Fix
 
@@ -857,7 +880,8 @@ jobs:
   autofix:
     if: |
       (github.event_name == 'issues' && github.event.label.name == 'auto-fix') ||
-      (github.event_name == 'issue_comment' && contains(github.event.comment.body, '@claude'))
+      (github.event_name == 'issue_comment' && \
+contains(github.event.comment.body, '@claude'))
     runs-on: ubuntu-latest
     timeout-minutes: 120
 
@@ -893,6 +917,7 @@ def install_workflow(base_path: Path, content: str) -> bool:
 # Interactive Prompts
 # ============================================================================
 
+
 def prompt_github_token(info: ProjectInfo) -> str | None:
     """Handle GitHub token setup interactively.
 
@@ -903,18 +928,24 @@ def prompt_github_token(info: ProjectInfo) -> str | None:
     click.echo(click.style("GitHub Token Setup", fg="cyan", bold=True))
     click.echo(click.style("─" * 50, fg="cyan"))
     click.echo("Splat needs a GitHub token with 'repo' scope to create issues.")
-    click.echo(click.style("(Only used in deployed environments, not local dev)", fg="bright_black"))
+    click.echo(
+        click.style(
+            "(Only used in deployed environments, not local dev)", fg="bright_black"
+        )
+    )
 
     # Offer options
-    choice = ask(questionary.select(
-        "How would you like to set up your token?",
-        choices=[
-            "Open GitHub to generate a new token",
-            "Paste an existing token",
-            "Skip for now",
-        ],
-        style=CUSTOM_STYLE,
-    ))
+    choice: str = ask(
+        questionary.select(
+            "How would you like to set up your token?",
+            choices=[
+                "Open GitHub to generate a new token",
+                "Paste an existing token",
+                "Skip for now",
+            ],
+            style=CUSTOM_STYLE,
+        )
+    )
 
     if choice == "Skip for now":
         click.echo("\nYou can add the token later in Vercel dashboard:")
@@ -928,30 +959,38 @@ def prompt_github_token(info: ProjectInfo) -> str | None:
 
     # Get token from user
     while True:
-        token = ask(questionary.password(
-            "Paste your GitHub token:",
-            style=CUSTOM_STYLE,
-        ))
+        token: str = ask(
+            questionary.password(
+                "Paste your GitHub token:",
+                style=CUSTOM_STYLE,
+            )
+        )
 
         if not token:
-            skip = ask(questionary.confirm(
-                "Skip token setup for now?",
-                default=False,
-                style=CUSTOM_STYLE,
-            ))
+            skip: bool = ask(
+                questionary.confirm(
+                    "Skip token setup for now?",
+                    default=False,
+                    style=CUSTOM_STYLE,
+                )
+            )
             if skip:
                 return None
             continue
 
         if not validate_github_token(token):
-            click.echo(click.style("That doesn't look like a valid GitHub token.", fg="yellow"))
+            click.echo(
+                click.style("That doesn't look like a valid GitHub token.", fg="yellow")
+            )
             click.echo("Tokens usually start with 'ghp_' or 'github_pat_'")
 
-            retry = ask(questionary.confirm(
-                "Try again?",
-                default=True,
-                style=CUSTOM_STYLE,
-            ))
+            retry: bool = ask(
+                questionary.confirm(
+                    "Try again?",
+                    default=True,
+                    style=CUSTOM_STYLE,
+                )
+            )
             if not retry:
                 return None
             continue
@@ -991,7 +1030,8 @@ def run_claude_setup_token() -> str | None:
             """Extract OAuth token from text."""
             # Token format: sk-ant-oat01-...
             import re
-            match = re.search(r'sk-ant-oat01-[A-Za-z0-9_-]+', text)
+
+            match = re.search(r"sk-ant-oat01-[A-Za-z0-9_-]+", text)
             if match:
                 return match.group(0)
             return None
@@ -1004,7 +1044,7 @@ def run_claude_setup_token() -> str | None:
                     data = os.read(master_fd, 4096)
                     if not data:
                         break
-                    decoded = data.decode('utf-8', errors='replace')
+                    decoded = data.decode("utf-8", errors="replace")
                     sys.stdout.write(decoded)
                     sys.stdout.flush()
                     captured_output.append(decoded)
@@ -1027,7 +1067,7 @@ def run_claude_setup_token() -> str | None:
                         data = os.read(master_fd, 4096)
                         if not data:
                             break
-                        decoded = data.decode('utf-8', errors='replace')
+                        decoded = data.decode("utf-8", errors="replace")
                         sys.stdout.write(decoded)
                         sys.stdout.flush()
                         captured_output.append(decoded)
@@ -1052,14 +1092,18 @@ def prompt_claude_auth() -> tuple[str, str] | tuple[None, None]:
     click.echo(click.style("Claude Code Authentication", fg="cyan", bold=True))
     click.echo(click.style("─" * 50, fg="cyan"))
 
-    auth_type = ask(questionary.select(
-        "How do you want to authenticate Claude Code?",
-        choices=[
-            questionary.Choice("Claude Code subscription (OAuth token)", value="oauth"),
-            questionary.Choice("Anthropic API key", value="api_key"),
-        ],
-        style=CUSTOM_STYLE,
-    ))
+    auth_type: str = ask(
+        questionary.select(
+            "How do you want to authenticate Claude Code?",
+            choices=[
+                questionary.Choice(
+                    "Claude Code subscription (OAuth token)", value="oauth"
+                ),
+                questionary.Choice("Anthropic API key", value="api_key"),
+            ],
+            style=CUSTOM_STYLE,
+        )
+    )
 
     token = None
 
@@ -1073,9 +1117,13 @@ def prompt_claude_auth() -> tuple[str, str] | tuple[None, None]:
             token = run_claude_setup_token()
 
             if token:
-                click.echo(click.style("\n✓ OAuth token captured automatically!", fg="green"))
+                click.echo(
+                    click.style("\n✓ OAuth token captured automatically!", fg="green")
+                )
             else:
-                click.echo(click.style("\nCouldn't capture token automatically.", fg="yellow"))
+                click.echo(
+                    click.style("\nCouldn't capture token automatically.", fg="yellow")
+                )
         else:
             click.echo("\nClaude Code CLI not found. To get your OAuth token:")
             click.echo("  1. Install Claude Code CLI and log in")
@@ -1089,10 +1137,12 @@ def prompt_claude_auth() -> tuple[str, str] | tuple[None, None]:
 
     # If we didn't capture token automatically, ask user to paste
     if not token:
-        token = ask(questionary.password(
-            f"Paste your {'OAuth token' if auth_type == 'oauth' else 'API key'}:",
-            style=CUSTOM_STYLE,
-        ))
+        token = ask(
+            questionary.password(
+                f"Paste your {'OAuth token' if auth_type == 'oauth' else 'API key'}:",
+                style=CUSTOM_STYLE,
+            )
+        )
 
     if not token:
         return None, None
@@ -1106,14 +1156,18 @@ def prompt_model_selection() -> str:
     click.echo(click.style("Model Selection", fg="cyan", bold=True))
     click.echo(click.style("─" * 50, fg="cyan"))
 
-    model = ask(questionary.select(
-        "Which model should Claude Code use for auto-fixes?",
-        choices=[
-            questionary.Choice("Claude Opus 4.5 (most capable)", value="opus"),
-            questionary.Choice("Claude Sonnet 4 (faster, lower cost)", value="sonnet"),
-        ],
-        style=CUSTOM_STYLE,
-    ))
+    model: str = ask(
+        questionary.select(
+            "Which model should Claude Code use for auto-fixes?",
+            choices=[
+                questionary.Choice("Claude Opus 4.5 (most capable)", value="opus"),
+                questionary.Choice(
+                    "Claude Sonnet 4 (faster, lower cost)", value="sonnet"
+                ),
+            ],
+            style=CUSTOM_STYLE,
+        )
+    )
 
     return model
 
@@ -1128,16 +1182,20 @@ def prompt_github_secret_setup(repo: str, auth_type: str, token: str) -> bool:
 
     # Try gh CLI first
     if check_cli_exists("gh") and check_gh_auth():
-        use_gh = ask(questionary.confirm(
-            f"Use GitHub CLI to set {secret_name} secret?",
-            default=True,
-            style=CUSTOM_STYLE,
-        ))
+        use_gh: bool = ask(
+            questionary.confirm(
+                f"Use GitHub CLI to set {secret_name} secret?",
+                default=True,
+                style=CUSTOM_STYLE,
+            )
+        )
 
         if use_gh:
             click.echo(f"Setting {secret_name}...")
             if set_github_secret(repo, secret_name, token):
-                click.echo(click.style(f"✓ {secret_name} added to GitHub secrets", fg="green"))
+                click.echo(
+                    click.style(f"✓ {secret_name} added to GitHub secrets", fg="green")
+                )
                 return True
             else:
                 click.echo(click.style("Failed to set secret via gh CLI", fg="yellow"))
@@ -1146,13 +1204,16 @@ def prompt_github_secret_setup(repo: str, auth_type: str, token: str) -> bool:
     click.echo(f"\nTo add {secret_name} manually:")
     click.echo(f"  1. Go to https://github.com/{repo}/settings/secrets/actions/new")
     click.echo(f"  2. Name: {secret_name}")
-    click.echo(f"  3. Value: [paste your {'OAuth token' if auth_type == 'oauth' else 'API key'}]")
+    value_type = "OAuth token" if auth_type == "oauth" else "API key"
+    click.echo(f"  3. Value: [paste your {value_type}]")
 
-    open_browser = ask(questionary.confirm(
-        "Open GitHub secrets page in browser?",
-        default=True,
-        style=CUSTOM_STYLE,
-    ))
+    open_browser: bool = ask(
+        questionary.confirm(
+            "Open GitHub secrets page in browser?",
+            default=True,
+            style=CUSTOM_STYLE,
+        )
+    )
 
     if open_browser:
         click.launch(f"https://github.com/{repo}/settings/secrets/actions/new")
@@ -1167,11 +1228,13 @@ def prompt_vercel_setup(token: str) -> bool:
     click.echo(click.style("─" * 50, fg="cyan"))
 
     if not check_cli_exists("vercel"):
-        install = ask(questionary.confirm(
-            "Vercel CLI not found. Install it?",
-            default=True,
-            style=CUSTOM_STYLE,
-        ))
+        install: bool = ask(
+            questionary.confirm(
+                "Vercel CLI not found. Install it?",
+                default=True,
+                style=CUSTOM_STYLE,
+            )
+        )
 
         if install:
             click.echo("Installing Vercel CLI...")
@@ -1191,11 +1254,13 @@ def prompt_vercel_setup(token: str) -> bool:
         click.echo("Please log in to Vercel CLI first:")
         click.echo("  vercel login")
 
-        open_login = ask(questionary.confirm(
-            "Run 'vercel login' now?",
-            default=True,
-            style=CUSTOM_STYLE,
-        ))
+        open_login: bool = ask(
+            questionary.confirm(
+                "Run 'vercel login' now?",
+                default=True,
+                style=CUSTOM_STYLE,
+            )
+        )
 
         if open_login:
             # Run login interactively
@@ -1215,11 +1280,13 @@ def prompt_vercel_setup(token: str) -> bool:
     if not check_vercel_linked():
         click.echo("Project isn't linked to Vercel CLI (needed to add env vars).")
 
-        run_link = ask(questionary.confirm(
-            "Run 'vercel link' now?",
-            default=True,
-            style=CUSTOM_STYLE,
-        ))
+        run_link: bool = ask(
+            questionary.confirm(
+                "Run 'vercel link' now?",
+                default=True,
+                style=CUSTOM_STYLE,
+            )
+        )
 
         if run_link:
             subprocess.run(["vercel", "link"])
@@ -1235,11 +1302,13 @@ def prompt_vercel_setup(token: str) -> bool:
             return False
 
     # Add environment variable
-    add_env = ask(questionary.confirm(
-        "Add SPLAT_GITHUB_TOKEN to Vercel environment?",
-        default=True,
-        style=CUSTOM_STYLE,
-    ))
+    add_env: bool = ask(
+        questionary.confirm(
+            "Add SPLAT_GITHUB_TOKEN to Vercel environment?",
+            default=True,
+            style=CUSTOM_STYLE,
+        )
+    )
 
     if add_env:
         click.echo("Adding SPLAT_GITHUB_TOKEN to Vercel...")
@@ -1253,8 +1322,12 @@ def prompt_vercel_setup(token: str) -> bool:
             return False
     else:
         click.echo("")
-        click.echo(click.style("⚠ Warning: ", fg="yellow", bold=True) + "Splat won't be able to create GitHub issues from Vercel deployments.")
-        click.echo("  Add SPLAT_GITHUB_TOKEN manually: Project Settings > Environment Variables")
+        click.echo(
+            click.style("⚠ Warning: ", fg="yellow", bold=True)
+            + "Splat won't be able to create GitHub issues from Vercel deployments."
+        )
+        click.echo("  Add SPLAT_GITHUB_TOKEN manually:")
+        click.echo("  Project Settings > Environment Variables")
         return False
 
 
@@ -1274,7 +1347,9 @@ def prompt_middleware_injection(info: ProjectInfo) -> bool:
         return True
 
     if analysis.get("error") or not analysis.get("app_name"):
-        click.echo(click.style("Could not automatically detect app configuration", fg="yellow"))
+        click.echo(
+            click.style("Could not automatically detect app configuration", fg="yellow")
+        )
         click.echo(f"\nAdd Splat middleware manually to {info.framework_file}:")
         if info.framework == "fastapi":
             click.echo("  from splat.middleware.fastapi import SplatMiddleware")
@@ -1294,11 +1369,13 @@ def prompt_middleware_injection(info: ProjectInfo) -> bool:
     click.echo("\nProposed changes:")
     click.echo(click.style(preview, fg="cyan"))
 
-    proceed = ask(questionary.confirm(
-        "Apply these changes?",
-        default=True,
-        style=CUSTOM_STYLE,
-    ))
+    proceed: bool = ask(
+        questionary.confirm(
+            "Apply these changes?",
+            default=True,
+            style=CUSTOM_STYLE,
+        )
+    )
 
     if proceed:
         if inject_middleware(info.framework_file, info.framework, analysis):
@@ -1309,7 +1386,10 @@ def prompt_middleware_injection(info: ProjectInfo) -> bool:
             return False
     else:
         click.echo("")
-        click.echo(click.style("⚠ Warning: ", fg="yellow", bold=True) + "Splat won't capture errors without middleware.")
+        click.echo(
+            click.style("⚠ Warning: ", fg="yellow", bold=True)
+            + "Splat won't capture errors without middleware."
+        )
         click.echo(f"  Add manually to {info.framework_file.name}:")
         if info.framework == "fastapi":
             click.echo("    from splat.middleware.fastapi import SplatMiddleware")
@@ -1325,6 +1405,7 @@ def prompt_middleware_injection(info: ProjectInfo) -> bool:
 # Main Wizard
 # ============================================================================
 
+
 def run_init_wizard(base_path: Path | None = None) -> None:
     """Run the interactive setup wizard."""
     if base_path is None:
@@ -1334,7 +1415,7 @@ def run_init_wizard(base_path: Path | None = None) -> None:
 
     try:
         _run_wizard_steps(base_path, state)
-    except UserCancelled:
+    except UserCancelledError:
         click.echo("\n" + click.style("Setup cancelled.", fg="yellow"))
         sys.exit(1)
     except KeyboardInterrupt:
@@ -1357,7 +1438,8 @@ def _run_wizard_steps(base_path: Path, state: WizardState) -> None:
     click.echo(f"  • Type: {click.style(info.project_type, fg='cyan')}")
     if info.framework:
         file_name = info.framework_file.name if info.framework_file else "unknown"
-        click.echo(f"  • Framework: {click.style(info.framework.title(), fg='cyan')} (in {file_name})")
+        styled_fw = click.style(info.framework.title(), fg="cyan")
+        click.echo(f"  • Framework: {styled_fw} (in {file_name})")
     if info.github_repo:
         click.echo(f"  • GitHub: {click.style(info.github_repo, fg='cyan')}")
     if info.is_vercel:
@@ -1373,24 +1455,30 @@ def _run_wizard_steps(base_path: Path, state: WizardState) -> None:
     click.echo(click.style("─" * 50, fg="cyan"))
 
     if info.github_repo:
-        use_detected = ask(questionary.confirm(
-            f"Use {info.github_repo} as your Splat repository?",
-            default=True,
-            style=CUSTOM_STYLE,
-        ))
+        use_detected: bool = ask(
+            questionary.confirm(
+                f"Use {info.github_repo} as your Splat repository?",
+                default=True,
+                style=CUSTOM_STYLE,
+            )
+        )
 
         if use_detected:
             state.repo = info.github_repo
         else:
-            state.repo = ask(questionary.text(
+            state.repo = ask(
+                questionary.text(
+                    "Enter GitHub repository (owner/repo):",
+                    style=CUSTOM_STYLE,
+                )
+            )
+    else:
+        state.repo = ask(
+            questionary.text(
                 "Enter GitHub repository (owner/repo):",
                 style=CUSTOM_STYLE,
-            ))
-    else:
-        state.repo = ask(questionary.text(
-            "Enter GitHub repository (owner/repo):",
-            style=CUSTOM_STYLE,
-        ))
+            )
+        )
 
     # 3. GitHub token setup
     state.github_token = prompt_github_token(info)
@@ -1400,11 +1488,13 @@ def _run_wizard_steps(base_path: Path, state: WizardState) -> None:
     click.echo(click.style("Features", fg="cyan", bold=True))
     click.echo(click.style("─" * 50, fg="cyan"))
 
-    state.enable_autofix = ask(questionary.confirm(
-        "Enable Claude Code auto-fix? (automatically fix bugs via GitHub issues)",
-        default=True,
-        style=CUSTOM_STYLE,
-    ))
+    state.enable_autofix = ask(
+        questionary.confirm(
+            "Enable Claude Code auto-fix? (automatically fix bugs via GitHub issues)",
+            default=True,
+            style=CUSTOM_STYLE,
+        )
+    )
 
     # 5-7. Auto-fix specific setup
     if state.enable_autofix:
@@ -1453,7 +1543,9 @@ def _run_wizard_steps(base_path: Path, state: WizardState) -> None:
         )
         install_workflow(base_path, workflow_content)
         state.workflow_created = True
-        click.echo(click.style("✓ Created .github/workflows/splat-autofix.yml", fg="green"))
+        click.echo(
+            click.style("✓ Created .github/workflows/splat-autofix.yml", fg="green")
+        )
 
     # 12. Final summary
     click.echo("\n" + click.style("═" * 50, fg="green"))
@@ -1468,26 +1560,48 @@ def _run_wizard_steps(base_path: Path, state: WizardState) -> None:
 
     if state.enable_autofix:
         if state.github_secret_added:
-            secret_name = "CLAUDE_OAUTH_TOKEN" if state.claude_auth_type == "oauth" else "ANTHROPIC_API_KEY"
-            click.echo(click.style("✓", fg="green") + f" Claude auth: {secret_name} added to GitHub secrets")
+            secret_name = (
+                "CLAUDE_OAUTH_TOKEN"
+                if state.claude_auth_type == "oauth"
+                else "ANTHROPIC_API_KEY"
+            )
+            click.echo(
+                click.style("✓", fg="green")
+                + f" Claude auth: {secret_name} added to GitHub secrets"
+            )
         else:
-            click.echo(click.style("○", fg="yellow") + " Claude auth: add secret manually")
+            click.echo(
+                click.style("○", fg="yellow") + " Claude auth: add secret manually"
+            )
 
     if info.is_vercel:
         if state.vercel_env_added:
-            click.echo(click.style("✓", fg="green") + " Vercel: SPLAT_GITHUB_TOKEN added")
+            click.echo(
+                click.style("✓", fg="green") + " Vercel: SPLAT_GITHUB_TOKEN added"
+            )
         elif state.github_token:
-            click.echo(click.style("○", fg="yellow") + " Vercel: add SPLAT_GITHUB_TOKEN manually")
+            click.echo(
+                click.style("○", fg="yellow")
+                + " Vercel: add SPLAT_GITHUB_TOKEN manually"
+            )
         else:
-            click.echo(click.style("○", fg="yellow") + " Vercel: GitHub token not configured")
+            click.echo(
+                click.style("○", fg="yellow") + " Vercel: GitHub token not configured"
+            )
 
     if state.middleware_injected:
-        click.echo(click.style("✓", fg="green") + f" Middleware: injected into {info.framework_file.name if info.framework_file else 'app'}")
+        file_name = info.framework_file.name if info.framework_file else "app"
+        click.echo(
+            click.style("✓", fg="green") + f" Middleware: injected into {file_name}"
+        )
     elif info.framework:
         click.echo(click.style("○", fg="yellow") + " Middleware: add manually")
 
     if state.workflow_created:
-        click.echo(click.style("✓", fg="green") + " Workflow: .github/workflows/splat-autofix.yml created")
+        click.echo(
+            click.style("✓", fg="green")
+            + " Workflow: .github/workflows/splat-autofix.yml created"
+        )
 
     if state.config_written:
         click.echo(click.style("✓", fg="green") + " Config: pyproject.toml updated")
@@ -1498,9 +1612,22 @@ def _run_wizard_steps(base_path: Path, state: WizardState) -> None:
     click.echo(click.style("─" * 50, fg="cyan"))
 
     click.echo("\nJust commit and push:")
-    click.echo(click.style('  git add . && git commit -m "Add Splat error reporting" && git push', fg="cyan"))
+    click.echo(
+        click.style(
+            '  git add . && git commit -m "Add Splat error reporting" && git push',
+            fg="cyan",
+        )
+    )
 
     if state.enable_autofix:
-        click.echo(f"\nLabel any issue with {click.style('auto-fix', fg='green')} or mention {click.style('@claude', fg='green')} in comments to trigger fixes.")
+        autofix_label = click.style("auto-fix", fg="green")
+        claude_mention = click.style("@claude", fg="green")
+        click.echo(
+            f"\nLabel any issue with {autofix_label} or mention {claude_mention} "
+            "in comments to trigger fixes."
+        )
 
-    click.echo(f"\nDocumentation: {click.style('https://github.com/andreaslordos/splat', fg='blue', underline=True)}")
+    doc_url = click.style(
+        "https://github.com/andreaslordos/splat", fg="blue", underline=True
+    )
+    click.echo(f"\nDocumentation: {doc_url}")

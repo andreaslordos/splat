@@ -12,7 +12,9 @@ def get_workflow_template() -> str:
     """Load the auto-fix workflow template."""
     try:
         if hasattr(resources, "files"):
-            template_path = resources.files("splat.templates").joinpath("splat-autofix.yml")
+            template_path = resources.files("splat.templates").joinpath(
+                "splat-autofix.yml"
+            )
             return template_path.read_text()
         else:
             with resources.open_text("splat.templates", "splat-autofix.yml") as f:
@@ -47,9 +49,12 @@ def install_autofix_workflow(
     click.echo(f"Created {workflow_file}")
     click.echo("\nTo activate auto-fix:")
     click.echo("1. Add ANTHROPIC_API_KEY to your repository secrets:")
-    click.echo(f"   https://github.com/YOUR_ORG/YOUR_REPO/settings/secrets/actions/new")
-    click.echo("2. Commit and push: git add . && git commit -m 'Add auto-fix workflow' && git push")
+    click.echo("   https://github.com/YOUR_ORG/YOUR_REPO/settings/secrets/actions/new")
+    click.echo("2. Commit and push:")
+    click.echo("   git add . && git commit -m 'Add auto-fix workflow' && git push")
     click.echo("\nThen label any issue with 'auto-fix' or mention @claude in comments.")
-    click.echo("\nTip: Run 'splat init' for a full interactive setup with more options.")
+    click.echo(
+        "\nTip: Run 'splat init' for a full interactive setup with more options."
+    )
 
     return workflow_file

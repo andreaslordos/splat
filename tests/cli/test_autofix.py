@@ -2,9 +2,7 @@
 
 from pathlib import Path
 
-import pytest
-
-from splat.cli.autofix import install_autofix_workflow, get_workflow_template
+from splat.cli.autofix import get_workflow_template, install_autofix_workflow
 
 
 class TestGetWorkflowTemplate:
@@ -12,6 +10,7 @@ class TestGetWorkflowTemplate:
 
     def test_template_is_valid_yaml(self) -> None:
         import yaml
+
         template = get_workflow_template()
         parsed = yaml.safe_load(template)
         assert "name" in parsed

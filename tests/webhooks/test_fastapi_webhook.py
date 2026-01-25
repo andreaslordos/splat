@@ -159,9 +159,7 @@ class TestCreateWebhookRouter:
         logs = [{"message": "log1", "source": "lambda"}]
         body = json.dumps(logs)
 
-        response = client.post(
-            "/splat/logs", content=body
-        )  # No signature header
+        response = client.post("/splat/logs", content=body)  # No signature header
 
         assert response.status_code == 401
         mock_store.add_logs.assert_not_called()
@@ -227,8 +225,7 @@ class TestCreateWebhookRouter:
         warning_count = sum(
             1
             for record in caplog.records
-            if "secret" in record.message.lower()
-            and record.levelno == logging.WARNING
+            if "secret" in record.message.lower() and record.levelno == logging.WARNING
         )
         assert warning_count == 1
 

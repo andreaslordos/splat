@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import pytest
-
 from splat.core.formatter import format_issue_body, format_issue_title
 
 

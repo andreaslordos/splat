@@ -4,11 +4,10 @@ import os
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 from splat.cli.init import (
     ProjectInfo,
     WizardState,
+    analyze_framework_file,
     detect_existing_token,
     detect_framework,
     detect_github_remote,
@@ -16,7 +15,6 @@ from splat.cli.init import (
     detect_project_type,
     detect_test_infrastructure,
     detect_vercel_project,
-    analyze_framework_file,
     inject_middleware,
     run_init_wizard,
 )
@@ -130,9 +128,7 @@ class TestDetectGithubRemote:
         git_dir = tmp_path / ".git"
         git_dir.mkdir()
         config = git_dir / "config"
-        config.write_text(
-            '[remote "origin"]\n    url = git@github.com:owner/repo.git'
-        )
+        config.write_text('[remote "origin"]\n    url = git@github.com:owner/repo.git')
         result = detect_github_remote(tmp_path)
         assert result == "owner/repo"
 
@@ -279,14 +275,16 @@ class TestAnalyzeFrameworkFile:
 
     def test_analyzes_fastapi_file(self, tmp_path: Path) -> None:
         app_file = tmp_path / "main.py"
-        app_file.write_text("""from fastapi import FastAPI
+        app_file.write_text(
+            """from fastapi import FastAPI
 
 app = FastAPI()
 
 @app.get("/")
 def root():
     return {"hello": "world"}
-""")
+"""
+        )
         result = analyze_framework_file(app_file, "fastapi")
         assert result["app_name"] == "app"
         assert result["app_line"] == 3
@@ -295,14 +293,16 @@ def root():
 
     def test_analyzes_flask_file(self, tmp_path: Path) -> None:
         app_file = tmp_path / "app.py"
-        app_file.write_text("""from flask import Flask
+        app_file.write_text(
+            """from flask import Flask
 
 app = Flask(__name__)
 
 @app.route("/")
 def index():
     return "Hello"
-""")
+"""
+        )
         result = analyze_framework_file(app_file, "flask")
         assert result["app_name"] == "app"
         assert result["app_line"] == 3
@@ -311,22 +311,26 @@ def index():
 
     def test_detects_existing_splat_import(self, tmp_path: Path) -> None:
         app_file = tmp_path / "main.py"
-        app_file.write_text("""from fastapi import FastAPI
+        app_file.write_text(
+            """from fastapi import FastAPI
 from splat.middleware.fastapi import SplatMiddleware
 
 app = FastAPI()
-""")
+"""
+        )
         result = analyze_framework_file(app_file, "fastapi")
         assert result["has_splat_import"] is True
 
     def test_detects_existing_middleware(self, tmp_path: Path) -> None:
         app_file = tmp_path / "main.py"
-        app_file.write_text("""from fastapi import FastAPI
+        app_file.write_text(
+            """from fastapi import FastAPI
 from splat.middleware.fastapi import SplatMiddleware
 
 app = FastAPI()
 app.add_middleware(SplatMiddleware)
-""")
+"""
+        )
         result = analyze_framework_file(app_file, "fastapi")
         assert result["has_middleware"] is True
 
@@ -342,14 +346,16 @@ class TestInjectMiddleware:
 
     def test_injects_fastapi_middleware(self, tmp_path: Path) -> None:
         app_file = tmp_path / "main.py"
-        app_file.write_text("""from fastapi import FastAPI
+        app_file.write_text(
+            """from fastapi import FastAPI
 
 app = FastAPI()
 
 @app.get("/")
 def root():
     return {"hello": "world"}
-""")
+"""
+        )
         analysis = analyze_framework_file(app_file, "fastapi")
         result = inject_middleware(app_file, "fastapi", analysis)
 
@@ -360,14 +366,16 @@ def root():
 
     def test_injects_flask_middleware(self, tmp_path: Path) -> None:
         app_file = tmp_path / "app.py"
-        app_file.write_text("""from flask import Flask
+        app_file.write_text(
+            """from flask import Flask
 
 app = Flask(__name__)
 
 @app.route("/")
 def index():
     return "Hello"
-""")
+"""
+        )
         analysis = analyze_framework_file(app_file, "flask")
         result = inject_middleware(app_file, "flask", analysis)
 
@@ -504,8 +512,15 @@ class TestRunInitWizard:
             with patch("splat.cli.init.click.echo"):
                 with patch("splat.cli.init.update_pyproject_toml"):
                     with patch("splat.cli.init.install_workflow"):
-                        with patch("splat.cli.init.prompt_github_secret_setup", return_value=False):
-                            run_init_wizard(tmp_path)
+                        with patch(
+                            "splat.cli.init.prompt_github_secret_setup",
+                            return_value=False,
+                        ):
+                            with patch(
+                                "splat.cli.init.check_cli_exists",
+                                return_value=False,
+                            ):
+                                run_init_wizard(tmp_path)
 
 
 class TestDetectFrameworkEdgeCases:

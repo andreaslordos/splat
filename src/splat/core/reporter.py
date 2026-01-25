@@ -7,9 +7,9 @@ from typing import Any
 
 import httpx
 
-from splat.core.config import SplatConfig, load_config
-from splat.core.dedup import generate_signature, check_duplicate
-from splat.core.formatter import format_issue_title, format_issue_body
+from splat.core.config import load_config
+from splat.core.dedup import check_duplicate, generate_signature
+from splat.core.formatter import format_issue_body, format_issue_title
 from splat.core.log_buffer import LogBuffer
 from splat.core.vercel_logs import VercelLogStore
 
@@ -67,11 +67,7 @@ class Splat:
 
     def is_enabled(self) -> bool:
         """Check if Splat is enabled and properly configured."""
-        return bool(
-            self.config.enabled
-            and self.config.repo
-            and self.config.token
-        )
+        return bool(self.config.enabled and self.config.repo and self.config.token)
 
     async def report(
         self,
@@ -112,9 +108,8 @@ class Splat:
 
         # Determine which logs to use
         if logs is None:
-            if (
-                vercel_request_id is not None
-                and self._vercel_store.has_logs(vercel_request_id)
+            if vercel_request_id is not None and self._vercel_store.has_logs(
+                vercel_request_id
             ):
                 # Use Vercel logs and remove them from store
                 logs = self._vercel_store.format_logs_as_string(vercel_request_id)

@@ -1,10 +1,10 @@
 """Tests for the main Splat reporter class."""
 
 import os
-from unittest.mock import patch, AsyncMock
+from unittest.mock import patch
 
-import pytest
 import httpx
+import pytest
 import respx
 
 from splat.core.reporter import Splat
@@ -19,10 +19,13 @@ class TestSplatInit:
         assert splat.config.token == "ghp_test"
 
     def test_init_loads_from_env(self) -> None:
-        with patch.dict(os.environ, {
-            "SPLAT_GITHUB_REPO": "env/repo",
-            "SPLAT_GITHUB_TOKEN": "ghp_env",
-        }):
+        with patch.dict(
+            os.environ,
+            {
+                "SPLAT_GITHUB_REPO": "env/repo",
+                "SPLAT_GITHUB_TOKEN": "ghp_env",
+            },
+        ):
             splat = Splat()
             assert splat.config.repo == "env/repo"
             assert splat.config.token == "ghp_env"
@@ -61,8 +64,16 @@ class TestSplatReport:
         respx.get("https://api.github.com/search/issues").mock(
             return_value=httpx.Response(200, json={"items": []})
         )
-        create_route = respx.post("https://api.github.com/repos/owner/repo/issues").mock(
-            return_value=httpx.Response(201, json={"number": 1, "html_url": "https://github.com/owner/repo/issues/1"})
+        create_route = respx.post(
+            "https://api.github.com/repos/owner/repo/issues"
+        ).mock(
+            return_value=httpx.Response(
+                201,
+                json={
+                    "number": 1,
+                    "html_url": "https://github.com/owner/repo/issues/1",
+                },
+            )
         )
 
         splat = Splat(repo="owner/repo", token="ghp_test")
@@ -82,9 +93,9 @@ class TestSplatReport:
         respx.get("https://api.github.com/search/issues").mock(
             return_value=httpx.Response(200, json={"items": [{"number": 42}]})
         )
-        create_route = respx.post("https://api.github.com/repos/owner/repo/issues").mock(
-            return_value=httpx.Response(201, json={})
-        )
+        create_route = respx.post(
+            "https://api.github.com/repos/owner/repo/issues"
+        ).mock(return_value=httpx.Response(201, json={}))
 
         splat = Splat(repo="owner/repo", token="ghp_test")
 
@@ -102,9 +113,9 @@ class TestSplatReport:
         respx.get("https://api.github.com/search/issues").mock(
             return_value=httpx.Response(200, json={"items": []})
         )
-        create_route = respx.post("https://api.github.com/repos/owner/repo/issues").mock(
-            return_value=httpx.Response(201, json={"number": 1, "html_url": "url"})
-        )
+        create_route = respx.post(
+            "https://api.github.com/repos/owner/repo/issues"
+        ).mock(return_value=httpx.Response(201, json={"number": 1, "html_url": "url"}))
 
         splat = Splat(repo="owner/repo", token="ghp_test")
 
@@ -137,6 +148,7 @@ class TestSplatVercelLogStore:
         splat = Splat(repo="owner/repo", token="ghp_test")
         assert hasattr(splat, "_vercel_store")
         from splat.core.vercel_logs import VercelLogStore
+
         assert isinstance(splat._vercel_store, VercelLogStore)
 
     def test_vercel_store_uses_config_ttl(self) -> None:
@@ -168,16 +180,23 @@ class TestSplatReportVercelLogs:
         respx.get("https://api.github.com/search/issues").mock(
             return_value=httpx.Response(200, json={"items": []})
         )
-        create_route = respx.post("https://api.github.com/repos/owner/repo/issues").mock(
-            return_value=httpx.Response(201, json={"number": 1, "html_url": "url"})
-        )
+        create_route = respx.post(
+            "https://api.github.com/repos/owner/repo/issues"
+        ).mock(return_value=httpx.Response(201, json={"number": 1, "html_url": "url"}))
 
         splat = Splat(repo="owner/repo", token="ghp_test")
 
         # Add logs to Vercel store
-        splat._vercel_store.add_logs([
-            {"requestId": "req-123", "message": "Vercel log entry", "level": "error", "timestamp": 1700000000000}
-        ])
+        splat._vercel_store.add_logs(
+            [
+                {
+                    "requestId": "req-123",
+                    "message": "Vercel log entry",
+                    "level": "error",
+                    "timestamp": 1700000000000,
+                }
+            ]
+        )
 
         try:
             raise ValueError("test error")
@@ -195,16 +214,23 @@ class TestSplatReportVercelLogs:
         respx.get("https://api.github.com/search/issues").mock(
             return_value=httpx.Response(200, json={"items": []})
         )
-        create_route = respx.post("https://api.github.com/repos/owner/repo/issues").mock(
-            return_value=httpx.Response(201, json={"number": 1, "html_url": "url"})
-        )
+        create_route = respx.post(
+            "https://api.github.com/repos/owner/repo/issues"
+        ).mock(return_value=httpx.Response(201, json={"number": 1, "html_url": "url"}))
 
         splat = Splat(repo="owner/repo", token="ghp_test")
 
         # Add Vercel logs (should NOT be used)
-        splat._vercel_store.add_logs([
-            {"requestId": "req-123", "message": "Vercel log entry", "level": "error", "timestamp": 1700000000000}
-        ])
+        splat._vercel_store.add_logs(
+            [
+                {
+                    "requestId": "req-123",
+                    "message": "Vercel log entry",
+                    "level": "error",
+                    "timestamp": 1700000000000,
+                }
+            ]
+        )
 
         try:
             raise ValueError("test error")
@@ -224,16 +250,23 @@ class TestSplatReportVercelLogs:
         respx.get("https://api.github.com/search/issues").mock(
             return_value=httpx.Response(200, json={"items": []})
         )
-        create_route = respx.post("https://api.github.com/repos/owner/repo/issues").mock(
-            return_value=httpx.Response(201, json={"number": 1, "html_url": "url"})
-        )
+        create_route = respx.post(
+            "https://api.github.com/repos/owner/repo/issues"
+        ).mock(return_value=httpx.Response(201, json={"number": 1, "html_url": "url"}))
 
         splat = Splat(repo="owner/repo", token="ghp_test")
 
         # Add logs for different request ID
-        splat._vercel_store.add_logs([
-            {"requestId": "other-req", "message": "Other log", "level": "info", "timestamp": 1700000000000}
-        ])
+        splat._vercel_store.add_logs(
+            [
+                {
+                    "requestId": "other-req",
+                    "message": "Other log",
+                    "level": "info",
+                    "timestamp": 1700000000000,
+                }
+            ]
+        )
 
         try:
             raise ValueError("test error")
@@ -260,9 +293,16 @@ class TestSplatReportVercelLogs:
         splat = Splat(repo="owner/repo", token="ghp_test")
 
         # Add logs to Vercel store
-        splat._vercel_store.add_logs([
-            {"requestId": "req-123", "message": "Vercel log entry", "level": "error", "timestamp": 1700000000000}
-        ])
+        splat._vercel_store.add_logs(
+            [
+                {
+                    "requestId": "req-123",
+                    "message": "Vercel log entry",
+                    "level": "error",
+                    "timestamp": 1700000000000,
+                }
+            ]
+        )
 
         # Verify logs exist before report
         assert splat._vercel_store.has_logs("req-123")

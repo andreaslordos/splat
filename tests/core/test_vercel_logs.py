@@ -32,9 +32,7 @@ class TestVercelLogStoreAddLogs:
     def test_add_logs_stores_logs_by_request_id(self) -> None:
         """Test that add_logs stores logs keyed by requestId."""
         store = VercelLogStore()
-        logs = [
-            {"requestId": "req_123", "message": "Test message", "level": "info"}
-        ]
+        logs = [{"requestId": "req_123", "message": "Test message", "level": "info"}]
 
         store.add_logs(logs)
 
@@ -222,12 +220,16 @@ class TestVercelLogStoreFormatLogs:
     def test_format_logs_includes_timestamp(self) -> None:
         """Test that formatted logs include timestamp."""
         store = VercelLogStore()
-        store.add_logs([{
-            "requestId": "req_123",
-            "message": "Test message",
-            "level": "info",
-            "timestamp": 1706200000000,  # Unix timestamp in milliseconds
-        }])
+        store.add_logs(
+            [
+                {
+                    "requestId": "req_123",
+                    "message": "Test message",
+                    "level": "info",
+                    "timestamp": 1706200000000,  # Unix timestamp in milliseconds
+                }
+            ]
+        )
 
         formatted = store.format_logs_as_string("req_123")
 
@@ -236,12 +238,16 @@ class TestVercelLogStoreFormatLogs:
     def test_format_logs_includes_level(self) -> None:
         """Test that formatted logs include log level."""
         store = VercelLogStore()
-        store.add_logs([{
-            "requestId": "req_123",
-            "message": "Test message",
-            "level": "error",
-            "timestamp": 1706200000000,
-        }])
+        store.add_logs(
+            [
+                {
+                    "requestId": "req_123",
+                    "message": "Test message",
+                    "level": "error",
+                    "timestamp": 1706200000000,
+                }
+            ]
+        )
 
         formatted = store.format_logs_as_string("req_123")
 
@@ -250,12 +256,16 @@ class TestVercelLogStoreFormatLogs:
     def test_format_logs_includes_message(self) -> None:
         """Test that formatted logs include message."""
         store = VercelLogStore()
-        store.add_logs([{
-            "requestId": "req_123",
-            "message": "Test message content",
-            "level": "info",
-            "timestamp": 1706200000000,
-        }])
+        store.add_logs(
+            [
+                {
+                    "requestId": "req_123",
+                    "message": "Test message content",
+                    "level": "info",
+                    "timestamp": 1706200000000,
+                }
+            ]
+        )
 
         formatted = store.format_logs_as_string("req_123")
 
@@ -264,20 +274,22 @@ class TestVercelLogStoreFormatLogs:
     def test_format_logs_handles_multiple_logs(self) -> None:
         """Test that formatting works with multiple logs."""
         store = VercelLogStore()
-        store.add_logs([
-            {
-                "requestId": "req_123",
-                "message": "First",
-                "level": "info",
-                "timestamp": 1706200000000,
-            },
-            {
-                "requestId": "req_123",
-                "message": "Second",
-                "level": "error",
-                "timestamp": 1706200001000,
-            },
-        ])
+        store.add_logs(
+            [
+                {
+                    "requestId": "req_123",
+                    "message": "First",
+                    "level": "info",
+                    "timestamp": 1706200000000,
+                },
+                {
+                    "requestId": "req_123",
+                    "message": "Second",
+                    "level": "error",
+                    "timestamp": 1706200001000,
+                },
+            ]
+        )
 
         formatted = store.format_logs_as_string("req_123")
 
@@ -296,11 +308,15 @@ class TestVercelLogStoreFormatLogs:
     def test_format_logs_handles_missing_timestamp(self) -> None:
         """Test that format handles logs without timestamp."""
         store = VercelLogStore()
-        store.add_logs([{
-            "requestId": "req_123",
-            "message": "No timestamp",
-            "level": "info",
-        }])
+        store.add_logs(
+            [
+                {
+                    "requestId": "req_123",
+                    "message": "No timestamp",
+                    "level": "info",
+                }
+            ]
+        )
 
         formatted = store.format_logs_as_string("req_123")
 
@@ -309,11 +325,15 @@ class TestVercelLogStoreFormatLogs:
     def test_format_logs_handles_missing_level(self) -> None:
         """Test that format handles logs without level."""
         store = VercelLogStore()
-        store.add_logs([{
-            "requestId": "req_123",
-            "message": "No level",
-            "timestamp": 1706200000000,
-        }])
+        store.add_logs(
+            [
+                {
+                    "requestId": "req_123",
+                    "message": "No level",
+                    "timestamp": 1706200000000,
+                }
+            ]
+        )
 
         formatted = store.format_logs_as_string("req_123")
 

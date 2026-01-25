@@ -1,10 +1,10 @@
 """Tests for Flask middleware."""
 
-from unittest.mock import patch, AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from splat.middleware.flask import create_error_handler, SplatFlask
+from splat.middleware.flask import SplatFlask, create_error_handler
 
 
 class TestCreateErrorHandler:
@@ -43,8 +43,7 @@ class TestCreateErrorHandler:
                 mock_request.url = "http://localhost/api/test"
 
                 with patch.dict(
-                    "sys.modules",
-                    {"flask": MagicMock(request=mock_request)}
+                    "sys.modules", {"flask": MagicMock(request=mock_request)}
                 ):
                     handler = create_error_handler()
                     try:
@@ -170,7 +169,7 @@ class TestSplatFlask:
 
         mock_app.register_error_handler.assert_called_once()
         args = mock_app.register_error_handler.call_args[0]
-        assert args[0] == Exception
+        assert args[0] is Exception
 
     def test_init_with_app_in_constructor(self) -> None:
         mock_app = MagicMock()
@@ -199,6 +198,7 @@ class TestSplatFlask:
         ext.init_app(mock_app, repo="owner/repo", token="ghp_test")
 
         from splat.middleware.flask import _get_splat
+
         assert _get_splat() is ext.splat
 
     def test_init_app_registers_webhook_route_at_default_path(self) -> None:
@@ -283,8 +283,8 @@ class TestGetSplat:
     """Test _get_splat helper function."""
 
     def test_get_splat_returns_global_instance(self) -> None:
-        from splat.middleware.flask import _get_splat, _splat_instance
         import splat.middleware.flask as flask_module
+        from splat.middleware.flask import _get_splat
 
         # Set global instance
         mock_splat = MagicMock()
@@ -296,8 +296,8 @@ class TestGetSplat:
         flask_module._splat_instance = None
 
     def test_get_splat_returns_none_when_not_set(self) -> None:
-        from splat.middleware.flask import _get_splat
         import splat.middleware.flask as flask_module
+        from splat.middleware.flask import _get_splat
 
         flask_module._splat_instance = None
         assert _get_splat() is None

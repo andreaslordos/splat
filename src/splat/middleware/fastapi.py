@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Callable, Awaitable, MutableMapping
+from typing import Any, Awaitable, Callable, MutableMapping
 
 from splat.core.reporter import Splat
 
@@ -32,6 +32,7 @@ class SplatMiddleware:
             return
 
         from starlette.requests import Request
+
         request = Request(scope, receive, send)
 
         async def call_next(req: Request) -> Any:
@@ -55,10 +56,14 @@ class SplatMiddleware:
             context = {
                 "method": request.method,
                 "path": request.url.path,
-                "client": getattr(request.client, "host", "unknown")
-                if request.client
-                else "unknown",
+                "client": (
+                    getattr(request.client, "host", "unknown")
+                    if request.client
+                    else "unknown"
+                ),
             }
             vercel_request_id = request.headers.get("x-vercel-id")
-            await self.splat.report(e, context=context, vercel_request_id=vercel_request_id)
+            await self.splat.report(
+                e, context=context, vercel_request_id=vercel_request_id
+            )
             raise

@@ -71,9 +71,7 @@ def format_issue_body(
 
     # Format traceback
     tb_str = "".join(
-        traceback.format_exception(
-            type(exception), exception, exception.__traceback__
-        )
+        traceback.format_exception(type(exception), exception, exception.__traceback__)
     )
 
     # Build body sections

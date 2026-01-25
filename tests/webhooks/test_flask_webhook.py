@@ -29,6 +29,7 @@ class TestCreateWebhookHandler:
         """Test handler accepts valid logs and adds them to the store."""
         # Reset the warning flag
         import splat.webhooks.flask as flask_module
+
         flask_module._warned_no_secret = False
 
         mock_splat = MagicMock()
@@ -193,8 +194,7 @@ class TestCreateWebhookHandler:
         warning_count = sum(
             1
             for record in caplog.records
-            if "secret" in record.message.lower()
-            and record.levelno == logging.WARNING
+            if "secret" in record.message.lower() and record.levelno == logging.WARNING
         )
         assert warning_count == 1
 
@@ -202,6 +202,7 @@ class TestCreateWebhookHandler:
         """Test handler filters logs with filter_sources=True."""
         # Reset the warning flag
         import splat.webhooks.flask as flask_module
+
         flask_module._warned_no_secret = False
 
         mock_splat = MagicMock()
@@ -232,6 +233,7 @@ class TestCreateWebhookHandler:
         """Test handler returns received=0 for empty body."""
         # Reset the warning flag
         import splat.webhooks.flask as flask_module
+
         flask_module._warned_no_secret = False
 
         mock_splat = MagicMock()
@@ -327,6 +329,7 @@ class TestRegisterWebhookRoute:
         """Test register_webhook_route works with a real Flask app."""
         # Reset the warning flag
         import splat.webhooks.flask as flask_module
+
         flask_module._warned_no_secret = False
 
         mock_splat = MagicMock()

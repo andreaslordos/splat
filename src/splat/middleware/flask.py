@@ -21,6 +21,7 @@ def _run_async(coro: Any) -> Any:
         loop = asyncio.get_event_loop()
         if loop.is_running():
             import concurrent.futures
+
             with concurrent.futures.ThreadPoolExecutor() as executor:
                 future = executor.submit(asyncio.run, coro)
                 return future.result()
@@ -34,6 +35,7 @@ def create_error_handler(
     splat: Splat | None = None,
 ) -> Callable[[Exception], Any]:
     """Create a Flask error handler that reports errors to Splat."""
+
     def handler(error: Exception) -> Any:
         instance = splat or _get_splat()
         if instance is None:
@@ -43,6 +45,7 @@ def create_error_handler(
         vercel_request_id: str | None = None
         try:
             from flask import request
+
             context = {
                 "method": request.method,
                 "path": request.path,
@@ -53,7 +56,9 @@ def create_error_handler(
         except (ImportError, RuntimeError):
             pass
 
-        _run_async(instance.report(error, context=context, vercel_request_id=vercel_request_id))
+        _run_async(
+            instance.report(error, context=context, vercel_request_id=vercel_request_id)
+        )
         raise error
 
     return handler
@@ -75,4 +80,5 @@ class SplatFlask:
 
         # Auto-register Vercel webhook
         from splat.webhooks.flask import register_webhook_route
+
         register_webhook_route(app, self.splat)

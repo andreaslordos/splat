@@ -48,3 +48,14 @@ repos:
           - click>=8.0.0
           - flask>=2.0.0
           - fastapi>=0.100.0
+          - types-PyYAML
+
+  # Tests with coverage (must pass 80% threshold)
+  - repo: local
+    hooks:
+      - id: pytest-with-coverage
+        name: pytest with coverage (>=80%)
+        entry: venv/bin/pytest --cov=src/splat --cov-report=term-missing --cov-fail-under=80
+        language: system
+        pass_filenames: false
+        always_run: true

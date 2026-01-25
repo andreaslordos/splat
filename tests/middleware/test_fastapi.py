@@ -1,7 +1,7 @@
 """Tests for FastAPI middleware."""
 
-from unittest.mock import patch, AsyncMock, MagicMock
 from typing import Any
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 

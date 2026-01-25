@@ -4,8 +4,6 @@ import os
 from pathlib import Path
 from unittest.mock import patch
 
-import pytest
-
 from splat.core.config import SplatConfig, load_config
 
 
@@ -65,16 +63,16 @@ class TestLoadConfigFromEnv:
 class TestLoadConfigFromToml:
     """Test loading config from pyproject.toml."""
 
-    def test_load_config_reads_from_pyproject_toml(
-        self, tmp_path: Path
-    ) -> None:
+    def test_load_config_reads_from_pyproject_toml(self, tmp_path: Path) -> None:
         pyproject = tmp_path / "pyproject.toml"
-        pyproject.write_text("""
+        pyproject.write_text(
+            """
 [tool.splat]
 repo = "toml/repo"
 labels = ["custom", "labels"]
 log_buffer_size = 300
-""")
+"""
+        )
         with patch("splat.core.config._find_pyproject", return_value=pyproject):
             config = load_config()
             assert config.repo == "toml/repo"
@@ -92,10 +90,12 @@ class TestConfigPrecedence:
 
     def test_toml_overrides_env(self, tmp_path: Path) -> None:
         pyproject = tmp_path / "pyproject.toml"
-        pyproject.write_text("""
+        pyproject.write_text(
+            """
 [tool.splat]
 repo = "toml/repo"
-""")
+"""
+        )
         with patch.dict(os.environ, {"SPLAT_GITHUB_REPO": "env/repo"}):
             with patch("splat.core.config._find_pyproject", return_value=pyproject):
                 config = load_config()
@@ -103,10 +103,12 @@ repo = "toml/repo"
 
     def test_programmatic_overrides_toml(self, tmp_path: Path) -> None:
         pyproject = tmp_path / "pyproject.toml"
-        pyproject.write_text("""
+        pyproject.write_text(
+            """
 [tool.splat]
 repo = "toml/repo"
-""")
+"""
+        )
         with patch("splat.core.config._find_pyproject", return_value=pyproject):
             config = load_config(repo="programmatic/repo")
             assert config.repo == "programmatic/repo"
@@ -150,14 +152,14 @@ class TestLoadVercelConfigFromEnv:
 class TestLoadVercelConfigFromToml:
     """Test loading Vercel config from pyproject.toml."""
 
-    def test_load_config_reads_vercel_secret_from_toml(
-        self, tmp_path: Path
-    ) -> None:
+    def test_load_config_reads_vercel_secret_from_toml(self, tmp_path: Path) -> None:
         pyproject = tmp_path / "pyproject.toml"
-        pyproject.write_text("""
+        pyproject.write_text(
+            """
 [tool.splat]
 vercel_secret = "toml-secret"
-""")
+"""
+        )
         with patch("splat.core.config._find_pyproject", return_value=pyproject):
             config = load_config()
             assert config.vercel_secret == "toml-secret"
@@ -166,22 +168,24 @@ vercel_secret = "toml-secret"
         self, tmp_path: Path
     ) -> None:
         pyproject = tmp_path / "pyproject.toml"
-        pyproject.write_text("""
+        pyproject.write_text(
+            """
 [tool.splat]
 vercel_webhook_path = "/toml/webhook"
-""")
+"""
+        )
         with patch("splat.core.config._find_pyproject", return_value=pyproject):
             config = load_config()
             assert config.vercel_webhook_path == "/toml/webhook"
 
-    def test_load_config_reads_vercel_log_ttl_from_toml(
-        self, tmp_path: Path
-    ) -> None:
+    def test_load_config_reads_vercel_log_ttl_from_toml(self, tmp_path: Path) -> None:
         pyproject = tmp_path / "pyproject.toml"
-        pyproject.write_text("""
+        pyproject.write_text(
+            """
 [tool.splat]
 vercel_log_ttl = 180
-""")
+"""
+        )
         with patch("splat.core.config._find_pyproject", return_value=pyproject):
             config = load_config()
             assert config.vercel_log_ttl == 180
@@ -207,23 +211,25 @@ class TestVercelConfigPrecedence:
 
     def test_toml_vercel_secret_overrides_env(self, tmp_path: Path) -> None:
         pyproject = tmp_path / "pyproject.toml"
-        pyproject.write_text("""
+        pyproject.write_text(
+            """
 [tool.splat]
 vercel_secret = "toml-secret"
-""")
+"""
+        )
         with patch.dict(os.environ, {"SPLAT_VERCEL_SECRET": "env-secret"}):
             with patch("splat.core.config._find_pyproject", return_value=pyproject):
                 config = load_config()
                 assert config.vercel_secret == "toml-secret"
 
-    def test_programmatic_vercel_secret_overrides_toml(
-        self, tmp_path: Path
-    ) -> None:
+    def test_programmatic_vercel_secret_overrides_toml(self, tmp_path: Path) -> None:
         pyproject = tmp_path / "pyproject.toml"
-        pyproject.write_text("""
+        pyproject.write_text(
+            """
 [tool.splat]
 vercel_secret = "toml-secret"
-""")
+"""
+        )
         with patch("splat.core.config._find_pyproject", return_value=pyproject):
             config = load_config(vercel_secret="programmatic-secret")
             assert config.vercel_secret == "programmatic-secret"
