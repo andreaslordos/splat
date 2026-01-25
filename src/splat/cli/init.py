@@ -449,15 +449,19 @@ def add_vercel_env(name: str, value: str, environments: list[str]) -> tuple[bool
     if not environments:
         return False, "No environments specified"
 
-    # Single command with all environments
-    cmd = ["vercel", "env", "add", name, *environments, "-y"]
-    success, output = run_command(cmd, input_text=value)
+    errors = []
+    for env in environments:
+        # Vercel CLI only accepts one environment at a time
+        cmd = ["vercel", "env", "add", name, env, "-y"]
+        success, output = run_command(cmd, input_text=value)
 
-    if not success:
-        # Check if it failed because variable already exists
-        if "already exists" in output.lower():
-            return True, ""
-        return False, output
+        if not success:
+            # "already exists" is fine - treat as success
+            if "already exists" not in output.lower():
+                errors.append(f"{env}: {output}")
+
+    if errors:
+        return False, "; ".join(errors)
     return True, ""
 
 
