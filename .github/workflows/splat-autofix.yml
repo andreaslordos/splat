@@ -1,0 +1,25 @@
+name: Splat Auto-Fix
+
+on:
+  issues:
+    types: [labeled]
+
+jobs:
+  autofix:
+    if: github.event.label.name == 'auto-fix'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      issues: write
+      pull-requests: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Fix with Claude Code
+        uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          issue_number: ${{ github.event.issue.number }}
+          model: claude-sonnet-4-20250514
+          max_turns: 50
