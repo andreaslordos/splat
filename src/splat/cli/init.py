@@ -429,24 +429,66 @@ def set_github_secret(repo: str, name: str, value: str) -> bool:
     return success
 
 
-def add_vercel_env(name: str, value: str) -> tuple[bool, str]:
-    """Add environment variable to Vercel for all environments.
+def get_vercel_environments() -> list[str]:
+    """Get list of available Vercel environments for the linked project."""
+    # Default environments that Vercel always has
+    default_envs = ["production", "preview", "development"]
 
-    Vercel CLI requires adding to each environment separately when piping values.
+    # Try to get custom environments via vercel env ls
+    success, output = run_command(["vercel", "env", "ls"])
+    if not success:
+        return default_envs
+
+    # Parse output for environment names
+    # vercel env ls output includes environment names in the table
+    found_envs = set()
+    for line in output.splitlines():
+        line_lower = line.lower()
+        for env in default_envs:
+            if env in line_lower:
+                found_envs.add(env)
+        # Check for custom environment patterns (lines that look like env names)
+        # Custom envs appear in the "Environment" column
+        if "custom" in line_lower or line.strip() and not line.startswith(" "):
+            # Try to extract custom environment name
+            parts = line.split()
+            for part in parts:
+                part_clean = part.strip().lower()
+                if (
+                    part_clean
+                    and part_clean not in default_envs
+                    and len(part_clean) < 30
+                ):
+                    # Could be a custom environment name
+                    if part_clean.isalnum() or "-" in part_clean or "_" in part_clean:
+                        found_envs.add(part)
+
+    # Always include defaults, they're always available
+    return default_envs + [e for e in found_envs if e not in default_envs]
+
+
+def add_vercel_env(name: str, value: str, environments: list[str]) -> tuple[bool, str]:
+    """Add environment variable to Vercel for specified environments.
+
+    Args:
+        name: Environment variable name
+        value: Environment variable value
+        environments: List of environments (e.g., ["production", "preview"])
+
     Returns (success, error_message).
     """
-    errors = []
-    for env in ["production", "preview", "development"]:
-        success, output = run_command(
-            ["vercel", "env", "add", name, env, "-y"],
-            input_text=value,
-        )
-        if not success:
-            # Check if it failed because variable already exists
-            if "already exists" not in output.lower():
-                errors.append(f"{env}: {output}")
-    if errors:
-        return False, "; ".join(errors)
+    if not environments:
+        return False, "No environments specified"
+
+    # Single command with all environments
+    cmd = ["vercel", "env", "add", name, *environments, "-y"]
+    success, output = run_command(cmd, input_text=value)
+
+    if not success:
+        # Check if it failed because variable already exists
+        if "already exists" in output.lower():
+            return True, ""
+        return False, output
     return True, ""
 
 
@@ -1313,7 +1355,7 @@ def prompt_vercel_setup(token: str) -> bool:
             click.echo("  Project Settings > Environment Variables")
             return False
 
-    # Add environment variable
+    # Ask which environments to add the variable to
     add_env: bool = ask(
         questionary.confirm(
             "Add SPLAT_GITHUB_TOKEN to Vercel environment?",
@@ -1322,47 +1364,76 @@ def prompt_vercel_setup(token: str) -> bool:
         )
     )
 
-    if add_env:
-        click.echo("Adding SPLAT_GITHUB_TOKEN to Vercel...")
-        success, error = add_vercel_env("SPLAT_GITHUB_TOKEN", token)
-        if success:
-            click.echo(click.style("✓ SPLAT_GITHUB_TOKEN added to Vercel", fg="green"))
-            return True
-        else:
-            click.echo(click.style("Failed to add environment variable", fg="yellow"))
-            if error:
-                click.echo(click.style(f"  Error: {error}", fg="bright_black"))
-            # Check if project needs linking
-            if "not linked" in error.lower() or "link" in error.lower():
-                retry_link: bool = ask(
-                    questionary.confirm(
-                        "Project may not be linked. Run 'vercel link'?",
-                        default=True,
-                        style=CUSTOM_STYLE,
-                    )
-                )
-                if retry_link:
-                    subprocess.run(["vercel", "link"])
-                    # Retry adding env var
-                    click.echo("Retrying...")
-                    success, error = add_vercel_env("SPLAT_GITHUB_TOKEN", token)
-                    if success:
-                        click.echo(
-                            click.style(
-                                "✓ SPLAT_GITHUB_TOKEN added to Vercel", fg="green"
-                            )
-                        )
-                        return True
-            click.echo("\nAdd SPLAT_GITHUB_TOKEN manually in Vercel dashboard:")
-            click.echo("  Project Settings > Environment Variables")
-            return False
-    else:
+    if not add_env:
         click.echo("")
         click.echo(
             click.style("⚠ Warning: ", fg="yellow", bold=True)
             + "Splat won't be able to create GitHub issues from Vercel deployments."
         )
         click.echo("  Add SPLAT_GITHUB_TOKEN manually:")
+        click.echo("  Project Settings > Environment Variables")
+        return False
+
+    # Fetch available environments
+    click.echo("Fetching Vercel environments...")
+    available_envs = get_vercel_environments()
+
+    # Build choices dynamically
+    env_choices = [questionary.Choice("All environments", value="all", checked=True)]
+    for env in available_envs:
+        # Capitalize for display
+        display_name = env.replace("-", " ").replace("_", " ").title()
+        env_choices.append(questionary.Choice(display_name, value=env))
+
+    selected_envs: list[str] = ask(
+        questionary.checkbox(
+            "Which environments?",
+            choices=env_choices,
+            style=CUSTOM_STYLE,
+        )
+    )
+
+    # Resolve "all" to actual environments
+    if "all" in selected_envs:
+        environments = available_envs
+    else:
+        environments = [e for e in selected_envs if e in available_envs]
+
+    if not environments:
+        click.echo(click.style("No environments selected", fg="yellow"))
+        return False
+
+    click.echo(f"Adding SPLAT_GITHUB_TOKEN to {', '.join(environments)}...")
+    success, error = add_vercel_env("SPLAT_GITHUB_TOKEN", token, environments)
+    if success:
+        click.echo(click.style("✓ SPLAT_GITHUB_TOKEN added to Vercel", fg="green"))
+        return True
+    else:
+        click.echo(click.style("Failed to add environment variable", fg="yellow"))
+        if error:
+            click.echo(click.style(f"  Error: {error}", fg="bright_black"))
+        # Check if project needs linking
+        if "not linked" in error.lower() or "link" in error.lower():
+            retry_link: bool = ask(
+                questionary.confirm(
+                    "Project may not be linked. Run 'vercel link'?",
+                    default=True,
+                    style=CUSTOM_STYLE,
+                )
+            )
+            if retry_link:
+                subprocess.run(["vercel", "link"])
+                # Retry adding env var
+                click.echo("Retrying...")
+                success, error = add_vercel_env(
+                    "SPLAT_GITHUB_TOKEN", token, environments
+                )
+                if success:
+                    click.echo(
+                        click.style("✓ SPLAT_GITHUB_TOKEN added to Vercel", fg="green")
+                    )
+                    return True
+        click.echo("\nAdd SPLAT_GITHUB_TOKEN manually in Vercel dashboard:")
         click.echo("  Project Settings > Environment Variables")
         return False
 

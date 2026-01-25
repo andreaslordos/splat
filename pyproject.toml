@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "py-splat"
-version = "0.1.3"
+version = "0.1.4"
 description = "Automatic GitHub issue creation + PR fix on runtime errors"
 readme = "README.md"
 requires-python = ">=3.9"
