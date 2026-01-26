@@ -757,9 +757,9 @@ def get_workflow_template(
 
     # Determine model ID
     if model == "opus":
-        model_id = "claude-opus-4-5-20250514"
+        model_id = "claude-opus-4-5-20251101"
     else:
-        model_id = "claude-sonnet-4-20250514"
+        model_id = "claude-sonnet-4-5-20250929"
 
     # Determine setup steps based on project type
     setup_steps = ""
