@@ -1,7 +1,11 @@
 """Tests for the main Splat reporter class."""
 
+from __future__ import annotations
+
+import asyncio
 import os
-from unittest.mock import patch
+from typing import Any
+from unittest.mock import AsyncMock, patch
 
 import httpx
 import pytest
@@ -85,8 +89,13 @@ class TestSplatReport:
         except ValueError as e:
             result = await splat.report(e)
 
-        assert result is not None
-        assert result["number"] == 1
+        # report() now returns None immediately (async processing)
+        assert result is None
+
+        # Wait for queue to process
+        await asyncio.sleep(0.1)
+        await splat.shutdown(timeout=1.0)
+
         assert create_route.called
 
     @respx.mock
@@ -106,7 +115,14 @@ class TestSplatReport:
         except ValueError as e:
             result = await splat.report(e)
 
+        # report() now returns None immediately (async processing)
         assert result is None
+
+        # Wait for queue to process
+        await asyncio.sleep(0.1)
+        await splat.shutdown(timeout=1.0)
+
+        # Issue creation should not be called for duplicates
         assert not create_route.called
 
     @respx.mock
@@ -126,6 +142,10 @@ class TestSplatReport:
         except ValueError as e:
             await splat.report(e, context={"user_id": 123})
 
+        # Wait for queue to process
+        await asyncio.sleep(0.1)
+        await splat.shutdown(timeout=1.0)
+
         assert create_route.called
         request_body = create_route.calls[0].request.content.decode()
         assert "user_id" in request_body
@@ -140,3 +160,94 @@ class TestSplatReport:
             result = await splat.report(e)
 
         assert result is None
+
+    @pytest.mark.asyncio
+    async def test_report_queues_error_for_background_processing(self) -> None:
+        """Test that report() queues the error instead of processing immediately."""
+        splat = Splat(repo="owner/repo", token="ghp_test")
+        reports: list[Any] = []
+        splat._queue.enqueue = AsyncMock(side_effect=lambda r: reports.append(r))
+
+        try:
+            raise ValueError("test error")
+        except ValueError as e:
+            await splat.report(e, context={"key": "value"})
+
+        assert len(reports) == 1
+        assert isinstance(reports[0].exception, ValueError)
+        assert reports[0].context == {"key": "value"}
+
+
+class TestExceptionFiltering:
+    """Test exception filtering."""
+
+    @pytest.mark.asyncio
+    async def test_ignores_exception_in_ignore_list(self) -> None:
+        splat = Splat(
+            repo="owner/repo",
+            token="ghp_test",
+            ignore_exceptions=[ValueError],
+        )
+
+        try:
+            raise ValueError("ignored")
+        except ValueError as e:
+            result = await splat.report(e)
+
+        assert result is None
+
+    @pytest.mark.asyncio
+    async def test_reports_exception_not_in_ignore_list(self) -> None:
+        splat = Splat(
+            repo="owner/repo",
+            token="ghp_test",
+            ignore_exceptions=[TypeError],
+        )
+        reports: list[Any] = []
+        splat._queue.enqueue = AsyncMock(side_effect=lambda r: reports.append(r))
+
+        try:
+            raise ValueError("not ignored")
+        except ValueError as e:
+            await splat.report(e)
+
+        assert len(reports) == 1
+
+    @pytest.mark.asyncio
+    async def test_exception_filter_callback_can_skip(self) -> None:
+        def skip_value_errors(e: BaseException) -> bool:
+            return not isinstance(e, ValueError)
+
+        splat = Splat(
+            repo="owner/repo",
+            token="ghp_test",
+            exception_filter=skip_value_errors,
+        )
+
+        try:
+            raise ValueError("filtered out")
+        except ValueError as e:
+            result = await splat.report(e)
+
+        assert result is None
+
+    @pytest.mark.asyncio
+    async def test_exception_filter_callback_takes_precedence(self) -> None:
+        def allow_all(e: BaseException) -> bool:
+            return True
+
+        splat = Splat(
+            repo="owner/repo",
+            token="ghp_test",
+            ignore_exceptions=[ValueError],
+            exception_filter=allow_all,
+        )
+        reports: list[Any] = []
+        splat._queue.enqueue = AsyncMock(side_effect=lambda r: reports.append(r))
+
+        try:
+            raise ValueError("allowed by callback")
+        except ValueError as e:
+            await splat.report(e)
+
+        assert len(reports) == 1
