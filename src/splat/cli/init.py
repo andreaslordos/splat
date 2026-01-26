@@ -921,15 +921,29 @@ def get_workflow_template(
     has_test_infrastructure: bool,
     base_path: Path,
 ) -> str:
-    """Generate the workflow YAML content."""
+    """Generate the workflow YAML content using the embedded template.
 
-    # Determine auth line and secret name
+    The template file (src/splat/templates/splat-autofix.yml) contains all skills
+    inline, so we just need to customize the auth, model, and setup steps.
+    """
+    import importlib.resources
+
+    # Read the embedded template with all skills inline
+    try:
+        template_files = importlib.resources.files("splat.templates")
+        template_content = (template_files / "splat-autofix.yml").read_text()
+    except Exception:
+        # Fallback: read from file path relative to this module
+        template_path = Path(__file__).parent.parent / "templates" / "splat-autofix.yml"
+        template_content = template_path.read_text()
+
+    # Determine auth configuration
     if auth_type == "oauth":
         secret_name = "CLAUDE_OAUTH_TOKEN"
-        auth_line = "claude_code_oauth_token: ${{ env.CLAUDE_AUTH_TOKEN }}"
+        auth_param = "claude_code_oauth_token"
     else:
         secret_name = "ANTHROPIC_API_KEY"
-        auth_line = "anthropic_api_key: ${{ env.CLAUDE_AUTH_TOKEN }}"
+        auth_param = "anthropic_api_key"
 
     # Determine model ID
     if model == "opus":
@@ -937,7 +951,20 @@ def get_workflow_template(
     else:
         model_id = "claude-sonnet-4-5-20250929"
 
-    # Determine setup steps based on project type
+    # Replace auth configuration in template
+    # Template uses ANTHROPIC_API_KEY and anthropic_api_key by default
+    workflow = template_content.replace(
+        "secrets.ANTHROPIC_API_KEY", f"secrets.{secret_name}"
+    )
+    workflow = workflow.replace(
+        "anthropic_api_key: ${{ env.CLAUDE_AUTH_TOKEN }}",
+        f"{auth_param}: ${{{{ env.CLAUDE_AUTH_TOKEN }}}}",
+    )
+
+    # Replace model ID
+    workflow = workflow.replace("claude-sonnet-4-5-20250929", model_id)
+
+    # Build setup steps based on project type
     setup_steps = ""
     if project_type == "python":
         # Check for requirements.txt or pyproject.toml
@@ -970,185 +997,60 @@ def get_workflow_template(
         run: npm ci
 """
 
-    # Load skills content
-    skills_dir = base_path / "docs" / "skills"
+    # Insert setup steps after checkout (find the "Prepare authentication" step)
+    if setup_steps:
+        workflow = workflow.replace(
+            "      - name: Prepare authentication",
+            f"{setup_steps}      - name: Prepare authentication",
+        )
 
-    # Read skill files or use embedded defaults
-    try:
-        systematic_debugging = (skills_dir / "systematic-debugging.md").read_text()
-    except Exception:
-        systematic_debugging = "[Systematic debugging skill not found]"
-
-    try:
-        tdd = (skills_dir / "test-driven-development.md").read_text()
-    except Exception:
-        tdd = "[TDD skill not found]"
-
-    try:
-        verification = (skills_dir / "verification-before-completion.md").read_text()
-    except Exception:
-        verification = "[Verification skill not found]"
-
-    # TDD modification for projects without test infrastructure
-    tdd_modification = ""
+    # Add TDD modification for projects without test infrastructure
     if not has_test_infrastructure:
-        tdd_modification = """
-
-## IMPORTANT: This Project Has No Test Infrastructure
-
-Since this project does NOT have existing test infrastructure (no test directory,
-no pytest/jest configured), you must:
-
-- Create TEMPORARY test scripts to verify the fix (not permanent tests)
-- Use simple assertions, not a testing framework:
-
-```python
-# test_fix.py (TEMPORARY - delete after verification)
-from module import function_to_test
-
-# Test the bug is fixed
-result = function_to_test(problematic_input)
-assert result == expected_output, f"Expected {expected_output}, got {result}"
-print("✓ Bug fix verified")
-```
-
-- Run the script to see it FAIL (proving it catches the bug)
-- Implement the fix
-- Run the script to see it PASS
-- DELETE the temporary test script after verification
-- The goal is red-green proof, not permanent test infrastructure
-"""
-
-    # Build the full prompt
-    prompt = f"""You are fixing a bug reported in this GitHub issue. \
-Follow these three skills in order:
-
-===============================================================================
-SKILL 1: SYSTEMATIC DEBUGGING
-===============================================================================
-
-{systematic_debugging}
-
-===============================================================================
-SKILL 2: TEST-DRIVEN DEVELOPMENT
-===============================================================================
-
-{tdd}
-{tdd_modification}
-
-===============================================================================
-SKILL 3: VERIFICATION BEFORE COMPLETION
-===============================================================================
-
-{verification}
-
-===============================================================================
-FINAL INSTRUCTIONS
-===============================================================================
-
-1. Follow Systematic Debugging to find root cause (Phase 1-3)
-2. Follow TDD to create failing test, then fix (Phase 4)
-3. Follow Verification to prove it works before claiming success
-4. Create a PR with your changes when complete
-
-Remember: NO FIXES WITHOUT ROOT CAUSE INVESTIGATION FIRST.
-"""
-
-    # Escape the prompt for YAML (use literal block scalar)
-    # We'll use the | style with proper indentation
-    prompt_lines = prompt.split("\n")
-    indented_prompt = "\n".join(
-        "            " + line if line else "" for line in prompt_lines
-    )
-
-    workflow = f"""name: Splat Auto-Fix
-
-on:
-  issues:
-    types: [opened, labeled]
-  issue_comment:
-    types: [created]
-
-permissions:
-  contents: write
-  pull-requests: write
-  issues: write
-  id-token: write
-
-concurrency:
-  group: autofix-${{{{ github.event.issue.number }}}}
-  cancel-in-progress: true
-
-jobs:
-  check-label:
-    runs-on: ubuntu-latest
-    outputs:
-      should_run: ${{{{ steps.check.outputs.should_run }}}}
-    steps:
-      - name: Check trigger conditions
-        id: check
-        env:
-          GH_TOKEN: ${{{{ github.token }}}}
-          EVENT: ${{{{ github.event_name }}}}
-          ACTION: ${{{{ github.event.action }}}}
-          LABEL: ${{{{ github.event.label.name }}}}
-          IS_PR: ${{{{ github.event.issue.pull_request && 'true' || 'false' }}}}
-          HAS_MENTION: ${{{{ contains(github.event.comment.body, '@claude') }}}}
-        run: |
-          if [[ "$EVENT" == "issues" && "$ACTION" == "labeled" ]]; then
-            if [[ "$LABEL" == "auto-fix" ]]; then
-              echo "should_run=true" >> $GITHUB_OUTPUT
-            else
-              echo "should_run=false" >> $GITHUB_OUTPUT
-            fi
-          elif [[ "$EVENT" == "issues" && "$ACTION" == "opened" ]]; then
-            REPO="${{{{ github.repository }}}}"
-            ISSUE="${{{{ github.event.issue.number }}}}"
-            LABELS=$(gh api "repos/$REPO/issues/$ISSUE" --jq '.labels[].name' || true)
-            if echo "$LABELS" | grep -q '^auto-fix$'; then
-              echo "should_run=true" >> $GITHUB_OUTPUT
-            else
-              echo "should_run=false" >> $GITHUB_OUTPUT
-            fi
-          elif [[ "$EVENT" == "issue_comment" && "$IS_PR" != "true" ]]; then
-            if [[ "$HAS_MENTION" == "true" ]]; then
-              echo "should_run=true" >> $GITHUB_OUTPUT
-            else
-              echo "should_run=false" >> $GITHUB_OUTPUT
-            fi
-          else
-            echo "should_run=false" >> $GITHUB_OUTPUT
-          fi
-
-  autofix:
-    needs: [check-label]
-    if: needs.check-label.outputs.should_run == 'true'
-    runs-on: ubuntu-latest
-    timeout-minutes: 120
-
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 1
-{setup_steps}
-      - name: Prepare authentication
-        run: |
-          # Strip any newlines/whitespace from the token
-          TOKEN=$(echo "${{{{ secrets.{secret_name} }}}}" | tr -d '\\n\\r')
-          echo "CLAUDE_AUTH_TOKEN=$TOKEN" >> $GITHUB_ENV
-
-      - name: Fix with Claude Code
-        uses: anthropics/claude-code-action@v1
-        with:
-          {auth_line}
-          claude_args: |
-            --model {model_id}
-            --max-turns 100
-            --dangerously-skip-permissions
-          show_full_output: true
-          prompt: |
-{indented_prompt}
-"""
+        # fmt: off
+        tdd_modification = (
+            "\n"
+            "            ## IMPORTANT: This Project Has No Test Infrastructure\n"
+            "\n"
+            "            Since this project does NOT have existing test "
+            "infrastructure\n"
+            "            (no test directory, no pytest/jest configured), "
+            "you must:\n"
+            "\n"
+            "            - Create TEMPORARY test scripts to verify the fix "
+            "(not permanent tests)\n"
+            "            - Use simple assertions, not a testing framework:\n"
+            "\n"
+            "            ```python\n"
+            "            # test_fix.py (TEMPORARY - delete after "
+            "verification)\n"
+            "            from module import function_to_test\n"
+            "\n"
+            "            # Test the bug is fixed\n"
+            "            result = function_to_test(problematic_input)\n"
+            "            assert result == expected_output, "
+            'f"Expected {expected_output}, got {result}"\n'
+            '            print("✓ Bug fix verified")\n'
+            "            ```\n"
+            "\n"
+            "            - Run the script to see it FAIL (proving it catches "
+            "the bug)\n"
+            "            - Implement the fix\n"
+            "            - Run the script to see it PASS\n"
+            "            - DELETE the temporary test script after "
+            "verification\n"
+            "            - The goal is red-green proof, not permanent test "
+            "infrastructure\n"
+            "\n"
+        )
+        # fmt: on
+        # Insert after TDD skill section, before SKILL 3
+        # The equals line is 79 '=' chars with 12 spaces indent
+        equals_line = "            " + "=" * 79
+        skill3_header = f"{equals_line}\n            SKILL 3: VERIFICATION"
+        workflow = workflow.replace(
+            skill3_header,
+            f"{tdd_modification}{skill3_header}",
+        )
 
     return workflow
 
