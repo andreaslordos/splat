@@ -904,14 +904,49 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  check-label:
+    runs-on: ubuntu-latest
+    outputs:
+      should_run: ${{{{ steps.check.outputs.should_run }}}}
+    steps:
+      - name: Check trigger conditions
+        id: check
+        env:
+          GH_TOKEN: ${{{{ github.token }}}}
+          EVENT: ${{{{ github.event_name }}}}
+          ACTION: ${{{{ github.event.action }}}}
+          LABEL: ${{{{ github.event.label.name }}}}
+          IS_PR: ${{{{ github.event.issue.pull_request && 'true' || 'false' }}}}
+          HAS_MENTION: ${{{{ contains(github.event.comment.body, '@claude') }}}}
+        run: |
+          if [[ "$EVENT" == "issues" && "$ACTION" == "labeled" ]]; then
+            if [[ "$LABEL" == "auto-fix" ]]; then
+              echo "should_run=true" >> $GITHUB_OUTPUT
+            else
+              echo "should_run=false" >> $GITHUB_OUTPUT
+            fi
+          elif [[ "$EVENT" == "issues" && "$ACTION" == "opened" ]]; then
+            REPO="${{{{ github.repository }}}}"
+            ISSUE="${{{{ github.event.issue.number }}}}"
+            LABELS=$(gh api "repos/$REPO/issues/$ISSUE" --jq '.labels[].name' || true)
+            if echo "$LABELS" | grep -q '^auto-fix$'; then
+              echo "should_run=true" >> $GITHUB_OUTPUT
+            else
+              echo "should_run=false" >> $GITHUB_OUTPUT
+            fi
+          elif [[ "$EVENT" == "issue_comment" && "$IS_PR" != "true" ]]; then
+            if [[ "$HAS_MENTION" == "true" ]]; then
+              echo "should_run=true" >> $GITHUB_OUTPUT
+            else
+              echo "should_run=false" >> $GITHUB_OUTPUT
+            fi
+          else
+            echo "should_run=false" >> $GITHUB_OUTPUT
+          fi
+
   autofix:
-    if: >-
-      (github.event_name == 'issues' && github.event.action == 'labeled' &&
-      github.event.label.name == 'auto-fix') ||
-      (github.event_name == 'issues' && github.event.action == 'opened' &&
-      contains(toJSON(github.event.issue.labels.*.name), 'auto-fix')) ||
-      (github.event_name == 'issue_comment' &&
-      contains(github.event.comment.body, '@claude'))
+    needs: [check-label]
+    if: needs.check-label.outputs.should_run == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 120
 
