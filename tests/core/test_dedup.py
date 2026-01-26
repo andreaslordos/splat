@@ -18,7 +18,7 @@ class TestGenerateSignature:
         except ValueError as e:
             sig = generate_signature(e)
             # Same exception type should produce same prefix
-            assert len(sig) == 8
+            assert len(sig) == 16  # Changed from 8
 
     def test_same_error_produces_same_signature(self) -> None:
         def raise_error() -> None:
@@ -46,12 +46,12 @@ class TestGenerateSignature:
 
         assert sig1 != sig2
 
-    def test_signature_is_8_chars(self) -> None:
+    def test_signature_is_16_chars(self) -> None:
         try:
             raise RuntimeError("test")
         except RuntimeError as e:
             sig = generate_signature(e)
-            assert len(sig) == 8
+            assert len(sig) == 16  # Changed from 8
             assert sig.isalnum()
 
 

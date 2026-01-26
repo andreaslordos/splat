@@ -5,7 +5,8 @@ from __future__ import annotations
 import hashlib
 from typing import TYPE_CHECKING, Any, cast
 
-import httpx
+from splat.core.config import SplatConfig
+from splat.core.http import github_request
 
 if TYPE_CHECKING:
     from types import TracebackType
@@ -29,7 +30,7 @@ def generate_signature(
         tb: Optional traceback (uses exception's __traceback__ if not provided)
 
     Returns:
-        8-character hex signature
+        16-character hex signature
     """
     if tb is None:
         tb = exception.__traceback__
@@ -57,16 +58,17 @@ def generate_signature(
         funcname,
     ]
 
-    # Hash to 8 chars
+    # Hash to 16 chars (was 8)
     signature_str = "|".join(components)
     hash_bytes = hashlib.md5(signature_str.encode()).hexdigest()
-    return hash_bytes[:8]
+    return hash_bytes[:16]  # Changed from [:8]
 
 
 async def check_duplicate(
     repo: str,
     token: str,
     signature: str,
+    config: SplatConfig | None = None,
 ) -> int | None:
     """
     Check if an issue with this signature already exists on GitHub.
@@ -75,24 +77,24 @@ async def check_duplicate(
         repo: GitHub repository (owner/repo format)
         token: GitHub API token
         signature: Error signature to search for
+        config: Optional SplatConfig (uses defaults if not provided)
 
     Returns:
         Issue number if duplicate found, None otherwise
     """
+    if config is None:
+        config = SplatConfig(repo=repo, token=token)
+
     query = f"repo:{repo} label:splat {signature} in:body"
 
-    async with httpx.AsyncClient() as client:
-        response = await client.get(
-            "https://api.github.com/search/issues",
-            params={"q": query},
-            headers={
-                "Authorization": f"Bearer {token}",
-                "Accept": "application/vnd.github+json",
-                "X-GitHub-Api-Version": "2022-11-28",
-            },
-        )
-        response.raise_for_status()
-        data: dict[str, Any] = response.json()
+    response = await github_request(
+        "get",
+        "/search/issues",
+        config,
+        params={"q": query},
+    )
+    response.raise_for_status()
+    data: dict[str, Any] = response.json()
 
     items: list[dict[str, Any]] = data.get("items", [])
     if items:
