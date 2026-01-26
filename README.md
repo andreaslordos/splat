@@ -2,6 +2,7 @@
 
 [![PyPI version](https://img.shields.io/pypi/v/py-splat.svg)](https://pypi.org/project/py-splat/)
 [![Python versions](https://img.shields.io/pypi/pyversions/py-splat.svg)](https://pypi.org/project/py-splat/)
+[![Documentation Status](https://readthedocs.org/projects/py-splat/badge/?version=latest)](https://py-splat.readthedocs.io/)
 [![License](https://img.shields.io/pypi/l/py-splat.svg)](https://github.com/andreaslordos/splat/blob/main/LICENSE)
 
 Splat automatically creates GitHub issues when your Flask or FastAPI app crashes, then uses Claude Code to generate fix PRs. Set it up once, and bugs fix themselves.
@@ -25,7 +26,7 @@ The injected code is minimal: two lines of code for each server you instantiate.
 
 ## Documentation
 
-See the [full documentation](https://andreaslordos.github.io/splat/) for configuration options and advanced usage.
+See the [full documentation](https://py-splat.readthedocs.io/) for configuration options and advanced usage.
 
 ## License
 

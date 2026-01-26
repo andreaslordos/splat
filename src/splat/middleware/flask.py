@@ -51,7 +51,6 @@ def create_error_handler(
             )
 
         context: dict[str, Any] = {}
-        vercel_request_id: str | None = None
         try:
             from flask import request
 
@@ -61,22 +60,14 @@ def create_error_handler(
                 "remote_addr": request.remote_addr,
                 "url": request.url,
             }
-            vercel_request_id = request.headers.get("x-vercel-id")
         except (ImportError, RuntimeError):
             pass
 
         if instance.config.debug:
-            logger.warning(
-                f"[SPLAT DEBUG] Flask context: {context}, "
-                f"vercel_request_id={vercel_request_id}"
-            )
+            logger.warning(f"[SPLAT DEBUG] Flask context: {context}")
 
         try:
-            _run_async(
-                instance.report(
-                    error, context=context, vercel_request_id=vercel_request_id
-                )
-            )
+            _run_async(instance.report(error, context=context))
         except Exception as report_error:
             if instance.config.debug:
                 logger.warning(f"[SPLAT DEBUG] Flask report() raised: {report_error}")
@@ -98,8 +89,3 @@ class SplatFlask:
         self.splat = Splat(**kwargs)
         _splat_instance = self.splat
         app.register_error_handler(Exception, create_error_handler(self.splat))
-
-        # Auto-register Vercel webhook
-        from splat.webhooks.flask import register_webhook_route
-
-        register_webhook_route(app, self.splat)

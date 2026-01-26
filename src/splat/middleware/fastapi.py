@@ -77,18 +77,12 @@ class SplatMiddleware:
                     else "unknown"
                 ),
             }
-            vercel_request_id = request.headers.get("x-vercel-id")
 
             if self.splat.config.debug:
-                logger.warning(
-                    f"[SPLAT DEBUG] FastAPI context: {context}, "
-                    f"vercel_request_id={vercel_request_id}"
-                )
+                logger.warning(f"[SPLAT DEBUG] FastAPI context: {context}")
 
             try:
-                await self.splat.report(
-                    e, context=context, vercel_request_id=vercel_request_id
-                )
+                await self.splat.report(e, context=context)
             except Exception as report_error:
                 if self.splat.config.debug:
                     logger.warning(

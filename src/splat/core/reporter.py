@@ -11,7 +11,6 @@ from splat.core.config import load_config
 from splat.core.dedup import check_duplicate, generate_signature
 from splat.core.formatter import format_issue_body, format_issue_title
 from splat.core.log_buffer import LogBuffer
-from splat.core.vercel_logs import VercelLogStore
 
 logger = logging.getLogger(__name__)
 
@@ -46,9 +45,6 @@ class Splat:
         enabled: bool | None = None,
         log_buffer_size: int | None = None,
         labels: list[str] | None = None,
-        vercel_secret: str | None = None,
-        vercel_webhook_path: str | None = None,
-        vercel_log_ttl: int | None = None,
         debug: bool | None = None,
     ) -> None:
         self.config = load_config(
@@ -57,18 +53,12 @@ class Splat:
             enabled=enabled,
             log_buffer_size=log_buffer_size,
             labels=labels,
-            vercel_secret=vercel_secret,
-            vercel_webhook_path=vercel_webhook_path,
-            vercel_log_ttl=vercel_log_ttl,
             debug=debug,
         )
 
         # Set up log buffer
         self._log_buffer = LogBuffer(capacity=self.config.log_buffer_size)
         logging.getLogger().addHandler(self._log_buffer)
-
-        # Set up Vercel log store
-        self._vercel_store = VercelLogStore(ttl_seconds=self.config.vercel_log_ttl)
 
         # Debug logging for initialization
         if self.config.debug:
@@ -102,7 +92,6 @@ class Splat:
         exception: BaseException,
         context: dict[str, Any] | None = None,
         logs: str | None = None,
-        vercel_request_id: str | None = None,
     ) -> dict[str, Any] | None:
         """
         Report an exception to GitHub Issues.
@@ -111,7 +100,6 @@ class Splat:
             exception: The exception to report
             context: Optional user-provided context dict
             logs: Optional log string (uses buffered logs if not provided)
-            vercel_request_id: Optional Vercel request ID to fetch logs from store
 
         Returns:
             Created issue data dict, or None if disabled/duplicate
@@ -120,8 +108,7 @@ class Splat:
             logger.warning(
                 f"[SPLAT DEBUG] report() called with: "
                 f"exception={type(exception).__name__}: {exception}, "
-                f"context={context}, "
-                f"vercel_request_id={vercel_request_id}"
+                f"context={context}"
             )
 
         if not self.is_enabled():
@@ -155,25 +142,11 @@ class Splat:
             logger.info(f"Duplicate error, issue #{existing} already exists")
             return None
 
-        # Determine which logs to use
+        # Use provided logs or fall back to log buffer
         if logs is None:
-            if vercel_request_id is not None and self._vercel_store.has_logs(
-                vercel_request_id
-            ):
-                # Use Vercel logs and remove them from store
-                logs = self._vercel_store.format_logs_as_string(vercel_request_id)
-                self._vercel_store.pop_logs(vercel_request_id)
-                if self.config.debug:
-                    logger.warning(
-                        f"[SPLAT DEBUG] Using Vercel logs ({len(logs)} chars)"
-                    )
-            else:
-                # Fall back to Python log buffer
-                logs = self._log_buffer.get_logs_as_string()
-                if self.config.debug:
-                    logger.warning(
-                        f"[SPLAT DEBUG] Using Python log buffer ({len(logs)} chars)"
-                    )
+            logs = self._log_buffer.get_logs_as_string()
+            if self.config.debug:
+                logger.warning(f"[SPLAT DEBUG] Using log buffer ({len(logs)} chars)")
 
         return await self._create_issue(
             exception=exception,
