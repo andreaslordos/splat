@@ -33,7 +33,7 @@ jobs:
           HAS_MENTION: ${{ contains(github.event.comment.body, '@claude') }}
         run: |
           if [[ "$EVENT" == "issues" && "$ACTION" == "labeled" ]]; then
-            if [[ "$LABEL" == "splat" ]]; then
+            if [[ "$LABEL" == "splat" || "$LABEL" == "auto-fix" ]]; then
               echo "should_run=true" >> $GITHUB_OUTPUT
             else
               echo "should_run=false" >> $GITHUB_OUTPUT
@@ -42,7 +42,7 @@ jobs:
             REPO="${{ github.repository }}"
             ISSUE="${{ github.event.issue.number }}"
             LABELS=$(gh api "repos/$REPO/issues/$ISSUE" --jq '.labels[].name' || true)
-            if echo "$LABELS" | grep -q '^splat$'; then
+            if echo "$LABELS" | grep -qE '^(splat|auto-fix)$'; then
               echo "should_run=true" >> $GITHUB_OUTPUT
             else
               echo "should_run=false" >> $GITHUB_OUTPUT
