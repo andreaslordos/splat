@@ -1099,17 +1099,42 @@ def run_claude_setup_token() -> str | None:
 
         os.close(slave_fd)  # Close slave in parent process
 
-        captured_output = []
-        captured_token = None
+        captured_output: list[str] = []
 
         def extract_token(text: str) -> str | None:
-            """Extract OAuth token from text."""
-            # Token format: sk-ant-oat01-...
-            import re
+            """Extract OAuth token from text.
 
-            match = re.search(r"sk-ant-oat01-[A-Za-z0-9_-]+", text)
-            if match:
-                return match.group(0)
+            Token may be line-wrapped in terminal output and surrounded
+            by ANSI escape codes, so we need to clean it up.
+            """
+            # First, strip ANSI escape codes
+            ansi_escape = re.compile(
+                r"\x1b\[[0-9;]*[a-zA-Z]|\x1b\][^\x07]*\x07|\x1b\[[?\d+[hl]"
+            )
+            clean_text = ansi_escape.sub("", text)
+
+            # Token format: sk-ant-oat01-...
+            match = re.search(r"sk-ant-oat01-", clean_text)
+            if not match:
+                return None
+
+            # Get everything after the token start
+            start_pos = match.start()
+            rest = clean_text[start_pos:]
+
+            # The token continues until we hit "Store this token"
+            end_match = re.search(r"Store this token", rest, re.IGNORECASE)
+            if end_match:
+                token_area = rest[: end_match.start()]
+            else:
+                token_area = rest[:200]  # Fallback: take first 200 chars
+
+            # Remove any whitespace/newlines from the token
+            token = re.sub(r"\s+", "", token_area)
+
+            # Validate it still looks like a token
+            if re.match(r"sk-ant-oat01-[A-Za-z0-9_-]+$", token):
+                return token
             return None
 
         while True:
@@ -1124,11 +1149,6 @@ def run_claude_setup_token() -> str | None:
                     sys.stdout.write(decoded)
                     sys.stdout.flush()
                     captured_output.append(decoded)
-
-                    # Look for token in output
-                    token = extract_token(decoded)
-                    if token:
-                        captured_token = token
                 except OSError:
                     break
 
@@ -1147,16 +1167,15 @@ def run_claude_setup_token() -> str | None:
                         sys.stdout.write(decoded)
                         sys.stdout.flush()
                         captured_output.append(decoded)
-
-                        token = extract_token(decoded)
-                        if token:
-                            captured_token = token
                 except OSError:
                     pass
                 break
 
         os.close(master_fd)
-        return captured_token
+
+        # Extract token from the full accumulated output
+        full_output = "".join(captured_output)
+        return extract_token(full_output)
 
     except Exception:
         return None
