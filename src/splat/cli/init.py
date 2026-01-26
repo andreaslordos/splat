@@ -104,26 +104,16 @@ def detect_project_type(base_path: Path) -> str:
 
 
 def detect_framework(base_path: Path) -> Tuple[str | None, Path | None]:
-    """Detect the web framework in use."""
-    py_files = list(base_path.glob("*.py")) + list(base_path.glob("**/*.py"))
+    """Detect the web framework in use.
 
-    for py_file in py_files[:50]:
-        try:
-            content = py_file.read_text()
-        except Exception:
-            continue
+    Note: This returns only the first detected framework file.
+    For multiple files, use find_framework_files_with_grep() instead.
+    """
+    files = find_framework_files_with_grep(base_path)
+    if files:
+        return (files[0].framework, files[0].file_path)
 
-        if "from flask import Flask" in content or "import flask" in content.lower():
-            if "Flask(__name__)" in content or "Flask(" in content:
-                return ("flask", py_file)
-
-        if (
-            "from fastapi import FastAPI" in content
-            or "import fastapi" in content.lower()
-        ):
-            if "FastAPI()" in content or "FastAPI(" in content:
-                return ("fastapi", py_file)
-
+    # Fallback: check for Django (not covered by grep approach)
     for settings_file in base_path.glob("**/settings.py"):
         try:
             content = settings_file.read_text()
