@@ -172,3 +172,30 @@ class TestNewConfigFromEnv:
             ):
                 config = load_config()
                 assert config.github_api_url == "https://github.example.com/api/v3"
+
+
+class TestNewConfigProgrammatic:
+    """Test new config options via programmatic override."""
+
+    def test_programmatic_timeout_overrides_default(self) -> None:
+        config = load_config(timeout=60.0)
+        assert config.timeout == 60.0
+
+    def test_programmatic_max_retries_overrides_default(self) -> None:
+        config = load_config(max_retries=5)
+        assert config.max_retries == 5
+
+    def test_programmatic_github_api_url_overrides_default(self) -> None:
+        config = load_config(github_api_url="https://github.example.com/api/v3")
+        assert config.github_api_url == "https://github.example.com/api/v3"
+
+    def test_programmatic_ignore_exceptions(self) -> None:
+        config = load_config(ignore_exceptions=[ValueError, TypeError])
+        assert config.ignore_exceptions == [ValueError, TypeError]
+
+    def test_programmatic_exception_filter(self) -> None:
+        def my_filter(e: BaseException) -> bool:
+            return True
+
+        config = load_config(exception_filter=my_filter)
+        assert config.exception_filter is my_filter
