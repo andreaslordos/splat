@@ -100,3 +100,23 @@ The workflow supports two authentication methods:
 - **OAuth**: Uses `CLAUDE_OAUTH_TOKEN` secret (for Claude Code subscription)
 
 These are configured during `splat init` or `splat install-autofix`.
+
+## Background Processing
+
+Errors are processed asynchronously in a background queue:
+
+1. **Non-blocking** - `report()` returns immediately, error is queued
+2. **Retries** - Failed API calls retry with exponential backoff (1s, 2s, 4s)
+3. **Graceful degradation** - After 3 attempts, errors are logged and dropped
+
+This ensures error tracking never slows down your application.
+
+## Payload Limits
+
+Large payloads are automatically truncated to prevent issues:
+
+- **Traceback**: Max 50,000 characters
+- **Log entries**: Max 500 entries (most recent kept)
+- **Context values**: Max 5,000 characters per value
+
+Truncated content shows `... [truncated]` indicator.

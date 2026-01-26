@@ -95,6 +95,55 @@ splat = SplatFlask(
 )
 ```
 
+## New in v1.0.0
+
+### API Configuration
+
+| Setting | Type | Default | Description |
+|---------|------|---------|-------------|
+| `timeout` | float | `30.0` | API request timeout in seconds |
+| `github_api_url` | string | `https://api.github.com` | GitHub API base URL (for Enterprise) |
+
+### Exception Filtering (Programmatic Only)
+
+| Setting | Type | Default | Description |
+|---------|------|---------|-------------|
+| `ignore_exceptions` | list | `[]` | Exception types to ignore |
+| `exception_filter` | callable | `None` | Custom filter callback |
+
+Example:
+```python
+app.add_middleware(
+    SplatMiddleware,
+    ignore_exceptions=[ValueError, KeyError],
+    exception_filter=lambda e: not isinstance(e, HTTPException),
+)
+```
+
+### Environment Variables
+
+```bash
+SPLAT_TIMEOUT=30.0
+SPLAT_GITHUB_API_URL=https://github.example.com/api/v3
+```
+
+### GitHub Enterprise
+
+To use with GitHub Enterprise:
+
+```python
+app.add_middleware(
+    SplatMiddleware,
+    github_api_url="https://github.mycompany.com/api/v3",
+)
+```
+
+Or via environment:
+
+```bash
+SPLAT_GITHUB_API_URL=https://github.mycompany.com/api/v3
+```
+
 ## Disabling Splat
 
 To temporarily disable error reporting:

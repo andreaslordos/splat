@@ -3,7 +3,7 @@
 ## Requirements
 
 - Python 3.9+
-- Flask or FastAPI application
+- Flask, FastAPI, or Django application
 - GitHub repository
 - GitHub token with `repo` scope
 
@@ -52,6 +52,21 @@ from splat.middleware.flask import SplatFlask
 
 app = Flask(__name__)
 splat = SplatFlask(app)
+```
+
+**Django:**
+
+```python
+# settings.py
+MIDDLEWARE = [
+    'splat.middleware.django.SplatMiddleware',
+    # ... other middleware
+]
+
+SPLAT = {
+    'repo': 'owner/repo',
+    'token': os.environ.get('SPLAT_GITHUB_TOKEN'),
+}
 ```
 
 Then set the required environment variables:

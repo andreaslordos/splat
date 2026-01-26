@@ -5,7 +5,7 @@
 [![Documentation Status](https://readthedocs.org/projects/py-splat/badge/?version=latest)](https://py-splat.readthedocs.io/)
 [![License](https://img.shields.io/pypi/l/py-splat.svg)](https://github.com/andreaslordos/splat/blob/main/LICENSE)
 
-Splat automatically creates GitHub issues when your Flask or FastAPI app crashes, then uses Claude Code to generate fix PRs. Set it up once, and bugs fix themselves.
+Splat automatically creates GitHub issues when your Flask, FastAPI, or Django app crashes, then uses Claude Code to generate fix PRs. Set it up once, and bugs fix themselves.
 
 ## Quick Start
 
