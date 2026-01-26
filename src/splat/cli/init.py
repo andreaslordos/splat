@@ -1631,16 +1631,24 @@ def prompt_vercel_setup(token: str, repo: str) -> bool:
     return True
 
 
-def prompt_middleware_injection(info: ProjectInfo) -> bool:
-    """Prompt for and perform middleware injection."""
-    if not info.framework or not info.framework_file:
-        return False
+def _show_manual_instructions(fw_file: FrameworkFile) -> None:
+    """Show manual install instructions for a framework file."""
+    click.echo(f"\nAdd Splat middleware manually to {fw_file.file_path}:")
+    if fw_file.framework == "fastapi":
+        click.echo("  from splat.middleware.fastapi import SplatMiddleware")
+        click.echo(f"  {fw_file.app_name}.add_middleware(SplatMiddleware)")
+    elif fw_file.framework == "flask":
+        click.echo("  from splat.middleware.flask import SplatFlask")
+        click.echo("  splat = SplatFlask()")
+        click.echo(f"  splat.init_app({fw_file.app_name})")
 
-    click.echo("\n" + click.style("─" * 50, fg="cyan"))
-    click.echo(click.style("Middleware Setup", fg="cyan", bold=True))
-    click.echo(click.style("─" * 50, fg="cyan"))
 
-    analysis = analyze_framework_file(info.framework_file, info.framework)
+def _inject_single_file(fw_file: FrameworkFile) -> bool:
+    """Handle middleware injection for a single file with confirm prompt.
+
+    Returns True if middleware was injected or already present.
+    """
+    analysis = analyze_framework_file(fw_file.file_path, fw_file.framework)
 
     if analysis.get("has_middleware"):
         click.echo(click.style("✓ Splat middleware already configured", fg="green"))
@@ -1650,17 +1658,10 @@ def prompt_middleware_injection(info: ProjectInfo) -> bool:
         click.echo(
             click.style("Could not automatically detect app configuration", fg="yellow")
         )
-        click.echo(f"\nAdd Splat middleware manually to {info.framework_file}:")
-        if info.framework == "fastapi":
-            click.echo("  from splat.middleware.fastapi import SplatMiddleware")
-            click.echo("  app.add_middleware(SplatMiddleware)")
-        elif info.framework == "flask":
-            click.echo("  from splat.middleware.flask import SplatFlask")
-            click.echo("  splat = SplatFlask()")
-            click.echo("  splat.init_app(app)")
+        _show_manual_instructions(fw_file)
         return False
 
-    preview = generate_injection_preview(info.framework_file, info.framework, analysis)
+    preview = generate_injection_preview(fw_file.file_path, fw_file.framework, analysis)
 
     if not preview:
         click.echo(click.style("✓ Splat middleware already configured", fg="green"))
@@ -1678,7 +1679,7 @@ def prompt_middleware_injection(info: ProjectInfo) -> bool:
     )
 
     if proceed:
-        if inject_middleware(info.framework_file, info.framework, analysis):
+        if inject_middleware(fw_file.file_path, fw_file.framework, analysis):
             click.echo(click.style("✓ Middleware injected successfully", fg="green"))
             return True
         else:
@@ -1690,15 +1691,163 @@ def prompt_middleware_injection(info: ProjectInfo) -> bool:
             click.style("⚠ Warning: ", fg="yellow", bold=True)
             + "Splat won't capture errors without middleware."
         )
-        click.echo(f"  Add manually to {info.framework_file.name}:")
-        if info.framework == "fastapi":
+        click.echo(f"  Add manually to {fw_file.file_path.name}:")
+        if fw_file.framework == "fastapi":
             click.echo("    from splat.middleware.fastapi import SplatMiddleware")
-            click.echo("    app.add_middleware(SplatMiddleware)")
-        elif info.framework == "flask":
+            click.echo(f"    {fw_file.app_name}.add_middleware(SplatMiddleware)")
+        elif fw_file.framework == "flask":
             click.echo("    from splat.middleware.flask import SplatFlask")
             click.echo("    splat = SplatFlask()")
-            click.echo("    splat.init_app(app)")
+            click.echo(f"    splat.init_app({fw_file.app_name})")
         return False
+
+
+def _inject_multiple_files(files: list[FrameworkFile], base_path: Path) -> bool:
+    """Handle middleware injection for multiple files with checkbox selection.
+
+    Returns True if at least one file was injected.
+    """
+    # Filter to files that need middleware (don't have it already)
+    files_needing_middleware: list[tuple[FrameworkFile, dict[str, Any]]] = []
+    for fw_file in files:
+        analysis = analyze_framework_file(fw_file.file_path, fw_file.framework)
+        if (
+            not analysis.get("has_middleware")
+            and not analysis.get("error")
+            and analysis.get("app_name")
+        ):
+            files_needing_middleware.append((fw_file, analysis))
+
+    if not files_needing_middleware:
+        click.echo(
+            click.style(
+                "✓ Splat middleware already configured in all files", fg="green"
+            )
+        )
+        return True
+
+    # Show checkbox for file selection (none pre-selected)
+    choices = []
+    for fw_file, _ in files_needing_middleware:
+        # Make path relative to base_path for display
+        try:
+            rel_path = fw_file.file_path.relative_to(base_path)
+        except ValueError:
+            rel_path = fw_file.file_path
+        label = f"{rel_path} ({fw_file.framework}, {fw_file.app_name})"
+        choices.append(
+            questionary.Choice(title=label, value=str(fw_file.file_path), checked=False)
+        )
+
+    selected_paths: list[str] = ask(
+        questionary.checkbox(
+            "Select files to add Splat middleware:",
+            choices=choices,
+            style=CUSTOM_STYLE,
+        )
+    )
+
+    if not selected_paths:
+        click.echo("")
+        click.echo(
+            click.style("⚠ Warning: ", fg="yellow", bold=True)
+            + "No files selected. Splat won't capture errors without middleware."
+        )
+        click.echo("\nAdd middleware manually to your app files.")
+        return False
+
+    # Filter to selected files
+    selected_files = [
+        (fw_file, analysis)
+        for fw_file, analysis in files_needing_middleware
+        if str(fw_file.file_path) in selected_paths
+    ]
+
+    # Show preview for each selected file
+    click.echo("\nProposed changes:")
+    for fw_file, analysis in selected_files:
+        preview = generate_injection_preview(
+            fw_file.file_path, fw_file.framework, analysis
+        )
+        if preview:
+            click.echo("")
+            click.echo(click.style(preview, fg="cyan"))
+
+    # Single confirmation for all changes
+    proceed: bool = ask(
+        questionary.confirm(
+            f"Apply changes to {len(selected_files)} file(s)?",
+            default=True,
+            style=CUSTOM_STYLE,
+        )
+    )
+
+    if not proceed:
+        click.echo("")
+        click.echo(
+            click.style("⚠ Warning: ", fg="yellow", bold=True)
+            + "Splat won't capture errors without middleware."
+        )
+        click.echo("\nAdd middleware manually to your app files.")
+        return False
+
+    # Inject into each selected file
+    success_count = 0
+    for fw_file, analysis in selected_files:
+        if inject_middleware(fw_file.file_path, fw_file.framework, analysis):
+            click.echo(
+                click.style(
+                    f"✓ Middleware injected into {fw_file.file_path.name}", fg="green"
+                )
+            )
+            success_count += 1
+        else:
+            click.echo(
+                click.style(
+                    f"✗ Failed to inject middleware into {fw_file.file_path.name}",
+                    fg="yellow",
+                )
+            )
+
+    return success_count > 0
+
+
+def prompt_middleware_injection(info: ProjectInfo) -> bool:
+    """Prompt for and perform middleware injection.
+
+    Handles both single-file and multi-file scenarios:
+    - Single file: Shows confirm prompt with preview
+    - Multiple files: Shows checkbox for selection, then previews and confirms
+    """
+    if not info.framework:
+        return False
+
+    click.echo("\n" + click.style("─" * 50, fg="cyan"))
+    click.echo(click.style("Middleware Setup", fg="cyan", bold=True))
+    click.echo(click.style("─" * 50, fg="cyan"))
+
+    # Get list of files that need middleware
+    files_to_process = info.framework_files if info.framework_files else []
+
+    # If no framework_files list but we have framework_file, create a single-item list
+    if not files_to_process and info.framework_file:
+        files_to_process = [
+            FrameworkFile(
+                framework=info.framework,
+                file_path=info.framework_file,
+                app_name=None,  # Will be detected by analyze_framework_file
+            )
+        ]
+
+    if not files_to_process:
+        click.echo(click.style("No framework files detected", fg="yellow"))
+        return False
+
+    # Route to appropriate handler based on file count
+    if len(files_to_process) == 1:
+        return _inject_single_file(files_to_process[0])
+    else:
+        return _inject_multiple_files(files_to_process, info.base_path)
 
 
 # ============================================================================

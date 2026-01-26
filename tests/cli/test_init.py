@@ -998,3 +998,134 @@ class TestFindFrameworkFilesWithGrep:
 
         result = find_framework_files_with_grep(tmp_path)
         assert result == []
+
+
+class TestPromptMiddlewareInjectionMultiFile:
+    """Test middleware injection with multiple files."""
+
+    def test_shows_checkbox_for_multiple_files(self, tmp_path: Path) -> None:
+        """Test that checkbox is shown when multiple files detected."""
+        from unittest.mock import MagicMock, patch
+
+        from splat.cli.init import (
+            FrameworkFile,
+            ProjectInfo,
+            prompt_middleware_injection,
+        )
+
+        # Create two FastAPI files
+        api_file = tmp_path / "api.py"
+        api_file.write_text("from fastapi import FastAPI\napp = FastAPI()")
+        admin_file = tmp_path / "admin.py"
+        admin_file.write_text("from fastapi import FastAPI\nadmin = FastAPI()")
+
+        files = [
+            FrameworkFile(framework="fastapi", file_path=api_file, app_name="app"),
+            FrameworkFile(framework="fastapi", file_path=admin_file, app_name="admin"),
+        ]
+
+        info = ProjectInfo(
+            project_type="python",
+            framework="fastapi",
+            framework_file=api_file,
+            framework_files=files,
+            github_repo="owner/repo",
+            base_path=tmp_path,
+        )
+
+        mock_questionary = MagicMock()
+        # User selects both files
+        mock_questionary.checkbox.return_value.ask.return_value = [
+            str(api_file),
+            str(admin_file),
+        ]
+        mock_questionary.confirm.return_value.ask.return_value = True
+
+        with patch("splat.cli.init.questionary", mock_questionary):
+            with patch("splat.cli.init.click.echo"):
+                result = prompt_middleware_injection(info)
+
+        # Verify checkbox was called
+        mock_questionary.checkbox.assert_called_once()
+        assert result is True
+
+    def test_injects_into_selected_files_only(self, tmp_path: Path) -> None:
+        """Test that middleware is only injected into selected files."""
+        from unittest.mock import MagicMock, patch
+
+        from splat.cli.init import (
+            FrameworkFile,
+            ProjectInfo,
+            prompt_middleware_injection,
+        )
+
+        api_file = tmp_path / "api.py"
+        api_file.write_text("from fastapi import FastAPI\napp = FastAPI()")
+        admin_file = tmp_path / "admin.py"
+        admin_file.write_text("from fastapi import FastAPI\nadmin = FastAPI()")
+
+        files = [
+            FrameworkFile(framework="fastapi", file_path=api_file, app_name="app"),
+            FrameworkFile(framework="fastapi", file_path=admin_file, app_name="admin"),
+        ]
+
+        info = ProjectInfo(
+            project_type="python",
+            framework="fastapi",
+            framework_file=api_file,
+            framework_files=files,
+            github_repo="owner/repo",
+            base_path=tmp_path,
+        )
+
+        mock_questionary = MagicMock()
+        # User selects only api.py
+        mock_questionary.checkbox.return_value.ask.return_value = [str(api_file)]
+        mock_questionary.confirm.return_value.ask.return_value = True
+
+        with patch("splat.cli.init.questionary", mock_questionary):
+            with patch("splat.cli.init.click.echo"):
+                prompt_middleware_injection(info)
+
+        # Check api.py was modified
+        assert "SplatMiddleware" in api_file.read_text()
+        # Check admin.py was NOT modified
+        assert "SplatMiddleware" not in admin_file.read_text()
+
+    def test_falls_back_to_single_file_behavior(self, tmp_path: Path) -> None:
+        """Test single file still works with confirm prompt."""
+        from unittest.mock import MagicMock, patch
+
+        from splat.cli.init import (
+            FrameworkFile,
+            ProjectInfo,
+            prompt_middleware_injection,
+        )
+
+        api_file = tmp_path / "api.py"
+        api_file.write_text("from fastapi import FastAPI\napp = FastAPI()")
+
+        files = [
+            FrameworkFile(framework="fastapi", file_path=api_file, app_name="app"),
+        ]
+
+        info = ProjectInfo(
+            project_type="python",
+            framework="fastapi",
+            framework_file=api_file,
+            framework_files=files,
+            github_repo="owner/repo",
+            base_path=tmp_path,
+        )
+
+        mock_questionary = MagicMock()
+        mock_questionary.confirm.return_value.ask.return_value = True
+
+        with patch("splat.cli.init.questionary", mock_questionary):
+            with patch("splat.cli.init.click.echo"):
+                result = prompt_middleware_injection(info)
+
+        # Verify confirm was called (not checkbox) for single file
+        mock_questionary.confirm.assert_called()
+        mock_questionary.checkbox.assert_not_called()
+        assert result is True
