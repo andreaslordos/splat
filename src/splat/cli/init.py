@@ -927,6 +927,7 @@ jobs:
           claude_args: |
             --model {model_id}
             --max-turns 100
+            --dangerously-skip-permissions
           prompt: |
 {indented_prompt}
 """
