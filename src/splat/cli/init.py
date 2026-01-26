@@ -64,6 +64,15 @@ class ProjectInfo:
 
 
 @dataclass
+class FrameworkFile:
+    """A detected framework file with app instantiation."""
+
+    framework: str  # "fastapi" or "flask"
+    file_path: Path
+    app_name: str | None = None  # The variable name (e.g., "app")
+
+
+@dataclass
 class WizardState:
     """State collected during wizard execution."""
 
@@ -580,6 +589,90 @@ def analyze_framework_file(file_path: Path, framework: str) -> dict[str, Any]:
         "has_middleware": finder.has_middleware,
         "file_content": content,
     }
+
+
+def find_framework_files_with_grep(base_path: Path) -> list[FrameworkFile]:
+    """Find all framework files using grep/ripgrep.
+
+    Uses ripgrep (rg) if available, falls back to grep.
+    Respects .gitignore when using ripgrep.
+    """
+    # Patterns to search for (the actual instantiation call)
+    # These are literal strings for grep -F, or regex for ripgrep
+    patterns = {
+        "fastapi": "FastAPI(",
+        "flask": "Flask(",
+    }
+
+    candidate_files: dict[Path, str] = {}  # path -> framework
+
+    for framework, pattern in patterns.items():
+        matched_paths = _grep_for_pattern(base_path, pattern)
+        for path in matched_paths:
+            # Don't overwrite if already found (first framework wins)
+            if path not in candidate_files:
+                candidate_files[path] = framework
+
+    # Now validate each candidate with AST to confirm real instantiation
+    result: list[FrameworkFile] = []
+    for file_path, framework in candidate_files.items():
+        analysis = analyze_framework_file(file_path, framework)
+        if analysis.get("app_name") and not analysis.get("error"):
+            result.append(
+                FrameworkFile(
+                    framework=framework,
+                    file_path=file_path,
+                    app_name=analysis["app_name"],
+                )
+            )
+
+    return result
+
+
+def _grep_for_pattern(base_path: Path, pattern: str) -> list[Path]:
+    """Run grep/ripgrep to find files matching pattern."""
+    matched_files: list[Path] = []
+
+    # Try ripgrep first (faster, respects .gitignore)
+    if shutil.which("rg"):
+        try:
+            result = subprocess.run(
+                ["rg", "-l", "-F", "--type", "py", pattern, "."],
+                cwd=base_path,
+                capture_output=True,
+                text=True,
+                timeout=30,
+            )
+            if result.returncode == 0:
+                for line in result.stdout.strip().split("\n"):
+                    if line:
+                        # rg returns paths like ./path/to/file.py
+                        clean_path = line.lstrip("./")
+                        matched_files.append(base_path / clean_path)
+                return matched_files
+        except (subprocess.TimeoutExpired, Exception):
+            pass  # Fall through to grep
+
+    # Fall back to grep
+    if shutil.which("grep"):
+        try:
+            result = subprocess.run(
+                ["grep", "-rlF", "--include=*.py", pattern, "."],
+                cwd=base_path,
+                capture_output=True,
+                text=True,
+                timeout=30,
+            )
+            if result.returncode == 0:
+                for line in result.stdout.strip().split("\n"):
+                    if line:
+                        # grep returns paths like ./path/to/file.py
+                        clean_path = line.lstrip("./")
+                        matched_files.append(base_path / clean_path)
+        except (subprocess.TimeoutExpired, Exception):
+            pass
+
+    return matched_files
 
 
 def generate_injection_preview(

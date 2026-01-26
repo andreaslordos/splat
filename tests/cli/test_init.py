@@ -875,3 +875,81 @@ class TestEnsureEnvInGitignore:
         result = ensure_env_in_gitignore(tmp_path)
 
         assert result is False
+
+
+class TestFindFrameworkFilesWithGrep:
+    """Test grep-based framework file detection."""
+
+    def test_finds_single_fastapi_file(self, tmp_path: Path) -> None:
+        """Test finding a single FastAPI file."""
+        from splat.cli.init import find_framework_files_with_grep
+
+        app_file = tmp_path / "main.py"
+        app_file.write_text("from fastapi import FastAPI\napp = FastAPI()")
+
+        result = find_framework_files_with_grep(tmp_path)
+        assert len(result) == 1
+        assert result[0].file_path == app_file
+        assert result[0].framework == "fastapi"
+
+    def test_finds_multiple_fastapi_files(self, tmp_path: Path) -> None:
+        """Test finding multiple FastAPI files."""
+        from splat.cli.init import find_framework_files_with_grep
+
+        # Create two FastAPI apps
+        api_dir = tmp_path / "api"
+        api_dir.mkdir()
+        (api_dir / "main.py").write_text("from fastapi import FastAPI\napp = FastAPI()")
+        (api_dir / "admin.py").write_text(
+            "from fastapi import FastAPI\nadmin_app = FastAPI()"
+        )
+
+        result = find_framework_files_with_grep(tmp_path)
+        assert len(result) == 2
+        paths = {f.file_path for f in result}
+        assert api_dir / "main.py" in paths
+        assert api_dir / "admin.py" in paths
+
+    def test_finds_flask_files(self, tmp_path: Path) -> None:
+        """Test finding Flask files."""
+        from splat.cli.init import find_framework_files_with_grep
+
+        app_file = tmp_path / "app.py"
+        app_file.write_text("from flask import Flask\napp = Flask(__name__)")
+
+        result = find_framework_files_with_grep(tmp_path)
+        assert len(result) == 1
+        assert result[0].framework == "flask"
+
+    def test_finds_mixed_frameworks(self, tmp_path: Path) -> None:
+        """Test finding both FastAPI and Flask files."""
+        from splat.cli.init import find_framework_files_with_grep
+
+        (tmp_path / "api.py").write_text("from fastapi import FastAPI\napp = FastAPI()")
+        (tmp_path / "web.py").write_text(
+            "from flask import Flask\napp = Flask(__name__)"
+        )
+
+        result = find_framework_files_with_grep(tmp_path)
+        assert len(result) == 2
+        frameworks = {f.framework for f in result}
+        assert frameworks == {"fastapi", "flask"}
+
+    def test_ignores_files_without_instantiation(self, tmp_path: Path) -> None:
+        """Test that files with just imports are ignored."""
+        from splat.cli.init import find_framework_files_with_grep
+
+        # File with import but no instantiation
+        (tmp_path / "utils.py").write_text("from fastapi import FastAPI\n# no app here")
+
+        result = find_framework_files_with_grep(tmp_path)
+        assert len(result) == 0
+
+    def test_returns_empty_for_no_matches(self, tmp_path: Path) -> None:
+        """Test returning empty list when no framework files found."""
+        from splat.cli.init import find_framework_files_with_grep
+
+        (tmp_path / "hello.py").write_text("print('hello')")
+
+        result = find_framework_files_with_grep(tmp_path)
+        assert result == []
