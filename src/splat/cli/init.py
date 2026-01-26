@@ -55,12 +55,15 @@ class ProjectInfo:
 
     project_type: str
     framework: str | None
-    framework_file: Path | None
+    framework_file: Path | None  # Keep for backwards compatibility (first file)
     github_repo: str | None
     base_path: Path
     is_vercel: bool = field(default=False)
     existing_token: str | None = field(default=None)
     has_test_infrastructure: bool = field(default=False)
+    framework_files: list["FrameworkFile"] = field(
+        default_factory=list
+    )  # All detected files
 
 
 @dataclass
@@ -314,11 +317,17 @@ def detect_project_info(base_path: Path) -> ProjectInfo:
     Combines all detection methods to return a populated ProjectInfo.
     """
     project_type = detect_project_type(base_path)
-    framework, framework_file = detect_framework(base_path)
     github_repo = detect_github_remote(base_path)
     is_vercel = detect_vercel_project(base_path)
     existing_token = detect_existing_token(base_path)
     has_test_infrastructure = detect_test_infrastructure(base_path)
+
+    # Use new grep-based detection for multiple files
+    framework_files = find_framework_files_with_grep(base_path)
+
+    # For backwards compatibility, set framework and framework_file from first match
+    framework = framework_files[0].framework if framework_files else None
+    framework_file = framework_files[0].file_path if framework_files else None
 
     return ProjectInfo(
         project_type=project_type,
@@ -329,6 +338,7 @@ def detect_project_info(base_path: Path) -> ProjectInfo:
         is_vercel=is_vercel,
         existing_token=existing_token,
         has_test_infrastructure=has_test_infrastructure,
+        framework_files=framework_files,
     )
 
 

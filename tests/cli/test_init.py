@@ -5,6 +5,7 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 from splat.cli.init import (
+    FrameworkFile,
     ProjectInfo,
     WizardState,
     analyze_framework_file,
@@ -875,6 +876,50 @@ class TestEnsureEnvInGitignore:
         result = ensure_env_in_gitignore(tmp_path)
 
         assert result is False
+
+
+class TestProjectInfoMultipleFrameworks:
+    """Test ProjectInfo with multiple framework files."""
+
+    def test_project_info_with_framework_files_list(self, tmp_path: Path) -> None:
+        """Test ProjectInfo holds list of framework files."""
+        from splat.cli.init import ProjectInfo
+
+        files = [
+            FrameworkFile(
+                framework="fastapi", file_path=tmp_path / "api.py", app_name="app"
+            ),
+            FrameworkFile(
+                framework="fastapi", file_path=tmp_path / "admin.py", app_name="admin"
+            ),
+        ]
+
+        info = ProjectInfo(
+            project_type="python",
+            framework="fastapi",
+            framework_file=tmp_path / "api.py",  # Keep for backwards compat
+            framework_files=files,
+            github_repo="owner/repo",
+            base_path=tmp_path,
+        )
+
+        assert len(info.framework_files) == 2
+        assert info.framework_files[0].app_name == "app"
+        assert info.framework_files[1].app_name == "admin"
+
+    def test_detect_project_info_finds_multiple_files(self, tmp_path: Path) -> None:
+        """Test detect_project_info populates framework_files list."""
+        from splat.cli.init import detect_project_info
+
+        (tmp_path / "pyproject.toml").write_text("[project]\nname = 'test'")
+        (tmp_path / "api.py").write_text("from fastapi import FastAPI\napp = FastAPI()")
+        (tmp_path / "admin.py").write_text(
+            "from fastapi import FastAPI\nadmin = FastAPI()"
+        )
+
+        info = detect_project_info(tmp_path)
+
+        assert len(info.framework_files) == 2
 
 
 class TestFindFrameworkFilesWithGrep:
