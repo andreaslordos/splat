@@ -117,3 +117,58 @@ repo = "toml/repo"
         with patch("splat.core.config._find_pyproject", return_value=pyproject):
             config = load_config(repo="programmatic/repo")
             assert config.repo == "programmatic/repo"
+
+
+class TestNewConfigDefaults:
+    """Test new v1.0 config defaults."""
+
+    def test_config_has_default_timeout(self) -> None:
+        config = SplatConfig()
+        assert config.timeout == 30.0
+
+    def test_config_has_default_max_retries(self) -> None:
+        config = SplatConfig()
+        assert config.max_retries == 3
+
+    def test_config_has_default_github_api_url(self) -> None:
+        config = SplatConfig()
+        assert config.github_api_url == "https://api.github.com"
+
+    def test_config_has_empty_ignore_exceptions(self) -> None:
+        config = SplatConfig()
+        assert config.ignore_exceptions == []
+
+    def test_config_has_no_exception_filter(self) -> None:
+        config = SplatConfig()
+        assert config.exception_filter is None
+
+    def test_config_has_default_max_traceback_length(self) -> None:
+        config = SplatConfig()
+        assert config.max_traceback_length == 50000
+
+    def test_config_has_default_max_log_entries(self) -> None:
+        config = SplatConfig()
+        assert config.max_log_entries == 500
+
+    def test_config_has_default_max_context_value_length(self) -> None:
+        config = SplatConfig()
+        assert config.max_context_value_length == 5000
+
+
+class TestNewConfigFromEnv:
+    """Test loading new config options from environment."""
+
+    def test_load_config_reads_timeout_from_env(self) -> None:
+        with patch("splat.core.config._find_pyproject", return_value=None):
+            with patch.dict(os.environ, {"SPLAT_TIMEOUT": "60.0"}):
+                config = load_config()
+                assert config.timeout == 60.0
+
+    def test_load_config_reads_github_api_url_from_env(self) -> None:
+        with patch("splat.core.config._find_pyproject", return_value=None):
+            with patch.dict(
+                os.environ,
+                {"SPLAT_GITHUB_API_URL": "https://github.example.com/api/v3"},
+            ):
+                config = load_config()
+                assert config.github_api_url == "https://github.example.com/api/v3"
