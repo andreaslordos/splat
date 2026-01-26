@@ -829,6 +829,87 @@ def inject_middleware(
 
 
 # ============================================================================
+# Dependency Management
+# ============================================================================
+
+
+def add_splat_dependency(base_path: Path) -> bool:
+    """Add py-splat as a project dependency.
+
+    Adds to pyproject.toml if it exists, otherwise requirements.txt.
+    Returns True if dependency was added or already present,
+    False if no dependency file found.
+    """
+    pyproject_path = base_path / "pyproject.toml"
+    requirements_path = base_path / "requirements.txt"
+
+    # Prefer pyproject.toml
+    if pyproject_path.exists():
+        return _add_to_pyproject_dependencies(pyproject_path)
+
+    # Fall back to requirements.txt
+    if requirements_path.exists():
+        return _add_to_requirements_txt(requirements_path)
+
+    return False
+
+
+def _add_to_pyproject_dependencies(pyproject_path: Path) -> bool:
+    """Add py-splat to pyproject.toml dependencies array."""
+    content = pyproject_path.read_text()
+
+    # Check if already present
+    if "py-splat" in content:
+        return True
+
+    # Find the dependencies array and add py-splat
+    # Pattern to find dependencies array
+    pattern = r"(dependencies\s*=\s*\[)([^\]]*)"
+    match = re.search(pattern, content, re.DOTALL)
+
+    if match:
+        # Insert py-splat into the dependencies array
+        prefix = match.group(1)
+        existing_deps = match.group(2).strip()
+
+        if existing_deps:
+            # Add after existing dependencies
+            if existing_deps.endswith(","):
+                new_deps = existing_deps + '\n    "py-splat",'
+            else:
+                new_deps = existing_deps + ',\n    "py-splat",'
+        else:
+            # Empty dependencies array
+            new_deps = '\n    "py-splat",\n'
+
+        new_content = (
+            content[: match.start()] + prefix + new_deps + content[match.end() :]
+        )
+        pyproject_path.write_text(new_content)
+        return True
+
+    # If no dependencies array found, we can't add it automatically
+    return False
+
+
+def _add_to_requirements_txt(requirements_path: Path) -> bool:
+    """Add py-splat to requirements.txt."""
+    content = requirements_path.read_text()
+
+    # Check if already present
+    if "py-splat" in content:
+        return True
+
+    # Append to file
+    if not content.endswith("\n"):
+        content += "\n"
+    content += "py-splat\n"
+
+    requirements_path.write_text(content)
+    return True
+
+
+# ============================================================================
 # Workflow Template Generation
 # ============================================================================
 
@@ -1957,7 +2038,15 @@ def _run_wizard_steps(base_path: Path, state: WizardState) -> None:
     # 9. Middleware injection
     state.middleware_injected = prompt_middleware_injection(info)
 
-    # 10. Write configuration
+    # 10. Add py-splat dependency
+    if add_splat_dependency(base_path):
+        click.echo(click.style("✓ Added py-splat to project dependencies", fg="green"))
+    else:
+        click.echo(
+            click.style("○ Add py-splat manually to your dependencies", fg="yellow")
+        )
+
+    # 11. Write configuration
     labels = ["bug", "splat"]
     if state.enable_autofix:
         labels.append("auto-fix")
@@ -1971,7 +2060,7 @@ def _run_wizard_steps(base_path: Path, state: WizardState) -> None:
     update_pyproject_toml(base_path, config)
     state.config_written = True
 
-    # 11. Install autofix workflow if enabled
+    # 12. Install autofix workflow if enabled
     if state.enable_autofix and state.claude_auth_type and state.model:
         workflow_content = get_workflow_template(
             auth_type=state.claude_auth_type,
@@ -1986,7 +2075,7 @@ def _run_wizard_steps(base_path: Path, state: WizardState) -> None:
             click.style("✓ Created .github/workflows/splat-autofix.yml", fg="green")
         )
 
-    # 12. Final summary
+    # 13. Final summary
     click.echo("\n" + click.style("═" * 50, fg="green"))
     click.echo(click.style("  Setup Complete!", fg="green", bold=True))
     click.echo(click.style("═" * 50, fg="green"))

@@ -1129,3 +1129,85 @@ class TestPromptMiddlewareInjectionMultiFile:
         mock_questionary.confirm.assert_called()
         mock_questionary.checkbox.assert_not_called()
         assert result is True
+
+
+class TestAddSplatDependency:
+    """Test adding py-splat as a dependency."""
+
+    def test_adds_to_requirements_txt(self, tmp_path: Path) -> None:
+        """Test adding py-splat to requirements.txt."""
+        from splat.cli.init import add_splat_dependency
+
+        req_file = tmp_path / "requirements.txt"
+        req_file.write_text("fastapi>=0.100.0\nuvicorn\n")
+
+        result = add_splat_dependency(tmp_path)
+
+        assert result is True
+        content = req_file.read_text()
+        assert "py-splat" in content
+
+    def test_adds_to_pyproject_toml_dependencies(self, tmp_path: Path) -> None:
+        """Test adding py-splat to pyproject.toml dependencies."""
+        from splat.cli.init import add_splat_dependency
+
+        pyproject = tmp_path / "pyproject.toml"
+        pyproject.write_text(
+            """[project]
+name = "myapp"
+dependencies = [
+    "fastapi>=0.100.0",
+]
+"""
+        )
+
+        result = add_splat_dependency(tmp_path)
+
+        assert result is True
+        content = pyproject.read_text()
+        assert "py-splat" in content
+
+    def test_does_not_duplicate_dependency(self, tmp_path: Path) -> None:
+        """Test that py-splat is not added if already present."""
+        from splat.cli.init import add_splat_dependency
+
+        req_file = tmp_path / "requirements.txt"
+        req_file.write_text("fastapi>=0.100.0\npy-splat>=0.2.0\n")
+
+        result = add_splat_dependency(tmp_path)
+
+        assert result is True  # Still succeeds, just doesn't duplicate
+        content = req_file.read_text()
+        assert content.count("py-splat") == 1
+
+    def test_prefers_pyproject_over_requirements(self, tmp_path: Path) -> None:
+        """Test that pyproject.toml is preferred over requirements.txt."""
+        from splat.cli.init import add_splat_dependency
+
+        # Create both files
+        req_file = tmp_path / "requirements.txt"
+        req_file.write_text("fastapi\n")
+
+        pyproject = tmp_path / "pyproject.toml"
+        pyproject.write_text(
+            """[project]
+name = "myapp"
+dependencies = ["fastapi"]
+"""
+        )
+
+        result = add_splat_dependency(tmp_path)
+
+        assert result is True
+        # Should be added to pyproject.toml
+        assert "py-splat" in pyproject.read_text()
+        # Should NOT be added to requirements.txt (since pyproject exists)
+        assert "py-splat" not in req_file.read_text()
+
+    def test_returns_false_when_no_dependency_file(self, tmp_path: Path) -> None:
+        """Test returns False when no dependency file exists."""
+        from splat.cli.init import add_splat_dependency
+
+        result = add_splat_dependency(tmp_path)
+
+        assert result is False
