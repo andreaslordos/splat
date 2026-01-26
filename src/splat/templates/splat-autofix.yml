@@ -2,7 +2,7 @@ name: Splat Auto-Fix
 
 on:
   issues:
-    types: [labeled]
+    types: [opened, labeled]
   issue_comment:
     types: [created]
 
@@ -19,7 +19,8 @@ concurrency:
 jobs:
   autofix:
     if: |
-      (github.event_name == 'issues' && github.event.label.name == 'auto-fix') ||
+      (github.event_name == 'issues' && github.event.action == 'labeled' && github.event.label.name == 'auto-fix') ||
+      (github.event_name == 'issues' && github.event.action == 'opened' && contains(toJSON(github.event.issue.labels.*.name), 'auto-fix')) ||
       (github.event_name == 'issue_comment' && contains(github.event.comment.body, '@claude'))
     runs-on: ubuntu-latest
     timeout-minutes: 120
@@ -33,8 +34,9 @@ jobs:
         uses: anthropics/claude-code-action@v1
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
-          model: claude-sonnet-4-20250514
-          max_turns: 100
+          claude_args: |
+            --model claude-sonnet-4-20250514
+            --max-turns 100
           prompt: |
             You are fixing a bug reported in this GitHub issue.
 

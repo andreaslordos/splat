@@ -889,7 +889,7 @@ Remember: NO FIXES WITHOUT ROOT CAUSE INVESTIGATION FIRST.
 
 on:
   issues:
-    types: [labeled]
+    types: [opened, labeled]
   issue_comment:
     types: [created]
 
@@ -905,10 +905,13 @@ concurrency:
 
 jobs:
   autofix:
-    if: |
-      (github.event_name == 'issues' && github.event.label.name == 'auto-fix') ||
-      (github.event_name == 'issue_comment' && \
-contains(github.event.comment.body, '@claude'))
+    if: >-
+      (github.event_name == 'issues' && github.event.action == 'labeled' &&
+      github.event.label.name == 'auto-fix') ||
+      (github.event_name == 'issues' && github.event.action == 'opened' &&
+      contains(toJSON(github.event.issue.labels.*.name), 'auto-fix')) ||
+      (github.event_name == 'issue_comment' &&
+      contains(github.event.comment.body, '@claude'))
     runs-on: ubuntu-latest
     timeout-minutes: 120
 
@@ -921,8 +924,9 @@ contains(github.event.comment.body, '@claude'))
         uses: anthropics/claude-code-action@v1
         with:
           {auth_line}
-          model: {model_id}
-          max_turns: 100
+          claude_args: |
+            --model {model_id}
+            --max-turns 100
           prompt: |
 {indented_prompt}
 """
