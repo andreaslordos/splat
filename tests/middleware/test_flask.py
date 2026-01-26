@@ -1,6 +1,6 @@
 """Tests for Flask middleware."""
 
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -16,55 +16,54 @@ class TestCreateErrorHandler:
 
     def test_handler_calls_splat_report(self) -> None:
         mock_splat = MagicMock()
-        mock_splat.report = AsyncMock(return_value={"number": 1})
+        mock_splat.report_sync = MagicMock()
 
         with patch("splat.middleware.flask._get_splat", return_value=mock_splat):
             handler = create_error_handler()
             error = ValueError("test")
 
-            with patch("splat.middleware.flask._run_async") as mock_run:
-                mock_run.return_value = {"number": 1}
-                try:
-                    handler(error)
-                except ValueError:
-                    pass  # Expected to re-raise
-                mock_run.assert_called_once()
+            try:
+                handler(error)
+            except ValueError:
+                pass  # Expected to re-raise
+            mock_splat.report_sync.assert_called_once()
 
     def test_handler_extracts_request_context(self) -> None:
         mock_splat = MagicMock()
-        mock_splat.report = AsyncMock(return_value={"number": 1})
+        mock_splat.report_sync = MagicMock()
 
         with patch("splat.middleware.flask._get_splat", return_value=mock_splat):
-            with patch("splat.middleware.flask._run_async") as mock_run:
-                mock_request = MagicMock()
-                mock_request.method = "POST"
-                mock_request.path = "/api/test"
-                mock_request.remote_addr = "127.0.0.1"
-                mock_request.url = "http://localhost/api/test"
+            mock_request = MagicMock()
+            mock_request.method = "POST"
+            mock_request.path = "/api/test"
+            mock_request.remote_addr = "127.0.0.1"
+            mock_request.url = "http://localhost/api/test"
 
-                with patch.dict(
-                    "sys.modules", {"flask": MagicMock(request=mock_request)}
-                ):
-                    handler = create_error_handler()
-                    try:
-                        handler(ValueError("test"))
-                    except ValueError:
-                        pass
+            with patch.dict("sys.modules", {"flask": MagicMock(request=mock_request)}):
+                handler = create_error_handler()
+                try:
+                    handler(ValueError("test"))
+                except ValueError:
+                    pass
 
-                    call_args = mock_run.call_args
-                    assert call_args is not None
+                mock_splat.report_sync.assert_called_once()
+                call_args = mock_splat.report_sync.call_args
+                assert call_args is not None
+                # Verify context was extracted
+                context = call_args.kwargs.get("context", {})
+                assert context.get("method") == "POST"
+                assert context.get("path") == "/api/test"
 
     def test_handler_reraises_error(self) -> None:
         mock_splat = MagicMock()
-        mock_splat.report = AsyncMock(return_value={"number": 1})
+        mock_splat.report_sync = MagicMock()
 
         with patch("splat.middleware.flask._get_splat", return_value=mock_splat):
-            with patch("splat.middleware.flask._run_async"):
-                handler = create_error_handler()
-                error = ValueError("test error")
+            handler = create_error_handler()
+            error = ValueError("test error")
 
-                with pytest.raises(ValueError, match="test error"):
-                    handler(error)
+            with pytest.raises(ValueError, match="test error"):
+                handler(error)
 
     def test_handler_raises_if_no_splat_instance(self) -> None:
         with patch("splat.middleware.flask._get_splat", return_value=None):
@@ -76,30 +75,28 @@ class TestCreateErrorHandler:
 
     def test_handler_with_explicit_splat_instance(self) -> None:
         mock_splat = MagicMock()
-        mock_splat.report = AsyncMock(return_value={"number": 1})
+        mock_splat.report_sync = MagicMock()
 
-        with patch("splat.middleware.flask._run_async") as mock_run:
-            handler = create_error_handler(splat=mock_splat)
-            try:
-                handler(ValueError("test"))
-            except ValueError:
-                pass
-            mock_run.assert_called_once()
+        handler = create_error_handler(splat=mock_splat)
+        try:
+            handler(ValueError("test"))
+        except ValueError:
+            pass
+        mock_splat.report_sync.assert_called_once()
 
     def test_handler_handles_import_error_gracefully(self) -> None:
         mock_splat = MagicMock()
-        mock_splat.report = AsyncMock(return_value={"number": 1})
+        mock_splat.report_sync = MagicMock()
 
         with patch("splat.middleware.flask._get_splat", return_value=mock_splat):
-            with patch("splat.middleware.flask._run_async") as mock_run:
-                # Simulate ImportError when flask is not available
-                with patch.dict("sys.modules", {"flask": None}):
-                    handler = create_error_handler()
-                    try:
-                        handler(ValueError("test"))
-                    except ValueError:
-                        pass
-                    mock_run.assert_called_once()
+            # Simulate ImportError when flask is not available
+            with patch.dict("sys.modules", {"flask": None}):
+                handler = create_error_handler()
+                try:
+                    handler(ValueError("test"))
+                except ValueError:
+                    pass
+                mock_splat.report_sync.assert_called_once()
 
 
 class TestSplatFlask:
@@ -144,29 +141,6 @@ class TestSplatFlask:
         from splat.middleware.flask import _get_splat
 
         assert _get_splat() is ext.splat
-
-
-class TestRunAsync:
-    """Test _run_async helper function."""
-
-    def test_run_async_with_simple_coroutine(self) -> None:
-        from splat.middleware.flask import _run_async
-
-        async def simple_coro() -> str:
-            return "result"
-
-        result = _run_async(simple_coro())
-        assert result == "result"
-
-    def test_run_async_handles_runtime_error(self) -> None:
-        from splat.middleware.flask import _run_async
-
-        async def simple_coro() -> str:
-            return "result"
-
-        with patch("asyncio.get_event_loop", side_effect=RuntimeError):
-            result = _run_async(simple_coro())
-            assert result == "result"
 
 
 class TestGetSplat:

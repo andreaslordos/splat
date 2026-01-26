@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 import logging
 from typing import Any, Callable
 
@@ -16,22 +15,6 @@ _splat_instance: Splat | None = None
 def _get_splat() -> Splat | None:
     """Get the global Splat instance."""
     return _splat_instance
-
-
-def _run_async(coro: Any) -> Any:
-    """Run an async coroutine from sync context."""
-    try:
-        loop = asyncio.get_event_loop()
-        if loop.is_running():
-            import concurrent.futures
-
-            with concurrent.futures.ThreadPoolExecutor() as executor:
-                future = executor.submit(asyncio.run, coro)
-                return future.result()
-        else:
-            return loop.run_until_complete(coro)
-    except RuntimeError:
-        return asyncio.run(coro)
 
 
 def create_error_handler(
@@ -67,7 +50,7 @@ def create_error_handler(
             logger.warning(f"[SPLAT DEBUG] Flask context: {context}")
 
         try:
-            _run_async(instance.report(error, context=context))
+            instance.report_sync(error, context=context)
         except Exception as report_error:
             if instance.config.debug:
                 logger.warning(f"[SPLAT DEBUG] Flask report() raised: {report_error}")
