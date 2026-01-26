@@ -47,6 +47,7 @@ jobs:
             --model claude-opus-4-5-20251101
             --max-turns 100
             --dangerously-skip-permissions
+          show_full_output: true
           prompt: |
             You are fixing a bug reported in this GitHub issue. Follow these three skills in order:
 

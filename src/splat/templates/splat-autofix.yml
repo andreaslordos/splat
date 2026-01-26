@@ -38,6 +38,7 @@ jobs:
             --model claude-sonnet-4-5-20250929
             --max-turns 100
             --dangerously-skip-permissions
+          show_full_output: true
           prompt: |
             You are fixing a bug reported in this GitHub issue.
 

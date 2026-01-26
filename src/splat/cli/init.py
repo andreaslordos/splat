@@ -928,6 +928,7 @@ jobs:
             --model {model_id}
             --max-turns 100
             --dangerously-skip-permissions
+          show_full_output: true
           prompt: |
 {indented_prompt}
 """
