@@ -6,6 +6,24 @@ import traceback
 from typing import Any
 
 
+def _truncate(text: str, max_length: int, suffix: str = "\n... [truncated]") -> str:
+    """Truncate text with indicator if over limit."""
+    if len(text) <= max_length:
+        return text
+    return text[: max_length - len(suffix)] + suffix
+
+
+def _truncate_logs(logs: str, max_entries: int) -> str:
+    """Truncate logs to max entries, keeping most recent."""
+    lines = logs.split("\n")
+    if len(lines) <= max_entries:
+        return logs
+    truncated_count = len(lines) - max_entries
+    kept_lines = lines[-max_entries:]
+    prefix = f"... [{truncated_count} earlier entries truncated]\n"
+    return prefix + "\n".join(kept_lines)
+
+
 def format_issue_title(exception: BaseException) -> str:
     """
     Format the GitHub issue title.
@@ -39,6 +57,10 @@ def format_issue_body(
     signature: str,
     context: dict[str, Any] | None = None,
     logs: str | None = None,
+    *,
+    max_traceback_length: int = 50000,
+    max_log_entries: int = 500,
+    max_context_value_length: int = 5000,
 ) -> str:
     """
     Format the GitHub issue body with full error details.
@@ -48,6 +70,9 @@ def format_issue_body(
         signature: Error signature for deduplication
         context: Optional user-provided context dict
         logs: Optional log string
+        max_traceback_length: Maximum length for traceback (default 50000)
+        max_log_entries: Maximum number of log entries to keep (default 500)
+        max_context_value_length: Maximum length for context values (default 5000)
 
     Returns:
         Formatted Markdown issue body
@@ -73,6 +98,7 @@ def format_issue_body(
     tb_str = "".join(
         traceback.format_exception(type(exception), exception, exception.__traceback__)
     )
+    tb_str = _truncate(tb_str, max_traceback_length)
 
     # Build body sections
     sections = []
@@ -99,7 +125,10 @@ def format_issue_body(
 
     # Context section (if provided)
     if context:
-        context_rows = "\n".join(f"| {k} | {v} |" for k, v in context.items())
+        truncated_context = {
+            k: _truncate(str(v), max_context_value_length) for k, v in context.items()
+        }
+        context_rows = "\n".join(f"| {k} | {v} |" for k, v in truncated_context.items())
         sections.append(
             f"""## Context
 
@@ -110,6 +139,7 @@ def format_issue_body(
 
     # Logs section (if provided and non-empty)
     if logs:
+        truncated_logs = _truncate_logs(logs, max_log_entries)
         sections.append(
             f"""## Recent Logs
 
@@ -117,7 +147,7 @@ def format_issue_body(
 <summary>Recent log entries</summary>
 
 ```
-{logs}
+{truncated_logs}
 ```
 
 </details>"""

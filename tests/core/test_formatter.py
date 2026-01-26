@@ -183,3 +183,59 @@ class TestFormatIssueBody:
             assert "| Key | Value |" in body
             assert "| key1 | value1 |" in body
             assert "| key2 | value2 |" in body
+
+
+class TestTruncation:
+    """Test payload truncation."""
+
+    def test_truncate_long_traceback(self) -> None:
+        try:
+            raise ValueError("test")
+        except ValueError as e:
+            body = format_issue_body(
+                e,
+                signature="abc12345",
+                max_traceback_length=100,
+            )
+            assert "... [truncated]" in body
+
+    def test_truncate_long_context_value(self) -> None:
+        try:
+            raise ValueError("test")
+        except ValueError as e:
+            long_value = "x" * 10000
+            body = format_issue_body(
+                e,
+                signature="abc12345",
+                context={"key": long_value},
+                max_context_value_length=100,
+            )
+            assert "... [truncated]" in body
+            assert "x" * 10000 not in body
+
+    def test_truncate_many_log_entries(self) -> None:
+        try:
+            raise ValueError("test")
+        except ValueError as e:
+            many_logs = "\n".join([f"Log line {i}" for i in range(1000)])
+            body = format_issue_body(
+                e,
+                signature="abc12345",
+                logs=many_logs,
+                max_log_entries=50,
+            )
+            assert "earlier entries truncated" in body
+            assert "Log line 999" in body  # Most recent kept
+            assert "Log line 0" not in body  # Old ones dropped
+
+    def test_no_truncation_when_under_limit(self) -> None:
+        try:
+            raise ValueError("test")
+        except ValueError as e:
+            body = format_issue_body(
+                e,
+                signature="abc12345",
+                context={"key": "short"},
+                max_context_value_length=1000,
+            )
+            assert "... [truncated]" not in body
