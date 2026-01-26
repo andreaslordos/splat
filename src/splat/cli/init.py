@@ -749,11 +749,13 @@ def get_workflow_template(
 ) -> str:
     """Generate the workflow YAML content."""
 
-    # Determine auth line
+    # Determine auth line and secret name
     if auth_type == "oauth":
-        auth_line = "claude_code_oauth_token: ${{ secrets.CLAUDE_OAUTH_TOKEN }}"
+        secret_name = "CLAUDE_OAUTH_TOKEN"
+        auth_line = "claude_code_oauth_token: ${{ env.CLAUDE_AUTH_TOKEN }}"
     else:
-        auth_line = "anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}"
+        secret_name = "ANTHROPIC_API_KEY"
+        auth_line = "anthropic_api_key: ${{ env.CLAUDE_AUTH_TOKEN }}"
 
     # Determine model ID
     if model == "opus":
@@ -955,6 +957,12 @@ jobs:
         with:
           fetch-depth: 1
 {setup_steps}
+      - name: Prepare authentication
+        run: |
+          # Strip any newlines/whitespace from the token
+          TOKEN=$(echo "${{{{ secrets.{secret_name} }}}}" | tr -d '\\n\\r')
+          echo "CLAUDE_AUTH_TOKEN=$TOKEN" >> $GITHUB_ENV
+
       - name: Fix with Claude Code
         uses: anthropics/claude-code-action@v1
         with:
