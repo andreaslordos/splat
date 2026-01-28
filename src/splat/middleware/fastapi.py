@@ -64,8 +64,7 @@ class SplatMiddleware:
         except Exception as e:
             if self.splat.config.debug:
                 logger.warning(
-                    f"[SPLAT DEBUG] FastAPI middleware caught: "
-                    f"{type(e).__name__}: {e}"
+                    f"[SPLAT DEBUG] FastAPI middleware caught: {type(e).__name__}: {e}"
                 )
 
             context = {

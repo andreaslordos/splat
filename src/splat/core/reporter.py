@@ -281,7 +281,7 @@ class Splat:
         )
         if self.config.debug:
             logger.warning(
-                f"[SPLAT DEBUG] GitHub API response: " f"status={response.status_code}"
+                f"[SPLAT DEBUG] GitHub API response: status={response.status_code}"
             )
         response.raise_for_status()
         issue_data: dict[str, Any] = response.json()

@@ -103,7 +103,7 @@ line-length = 88
 select = ["E", "F", "I", "N", "W"]
 
 [tool.coverage.run]
-source = ["splat"]
+source = ["src/splat"]
 omit = ["*/tests/*", "*/cli/init.py"]
 
 [tool.coverage.report]
