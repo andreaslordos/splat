@@ -208,7 +208,7 @@ class Splat:
         try:
             loop = asyncio.get_event_loop()
             if loop.is_running():
-                asyncio.ensure_future(self.report(exception, context, logs))
+                asyncio.create_task(self.report(exception, context, logs))
             else:
                 loop.run_until_complete(self.report(exception, context, logs))
         except RuntimeError:

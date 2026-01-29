@@ -24,6 +24,24 @@ def _truncate_logs(logs: str, max_entries: int) -> str:
     return prefix + "\n".join(kept_lines)
 
 
+def _extract_traceback_info(exception: BaseException) -> tuple[str, int, str]:
+    """Extract filename, line number, and function name from exception traceback."""
+    filename = "unknown"
+    lineno = 0
+    funcname = "unknown"
+
+    tb = exception.__traceback__
+    if tb is not None:
+        while tb.tb_next is not None:
+            tb = tb.tb_next
+        frame = tb.tb_frame
+        filename = frame.f_code.co_filename
+        lineno = tb.tb_lineno
+        funcname = frame.f_code.co_name
+
+    return filename, lineno, funcname
+
+
 def format_issue_title(exception: BaseException) -> str:
     """
     Format the GitHub issue title.
@@ -37,19 +55,11 @@ def format_issue_title(exception: BaseException) -> str:
         Formatted issue title
     """
     exc_type = type(exception).__name__
+    filename, lineno, _ = _extract_traceback_info(exception)
+    # Use only the filename (not full path) for the title
+    short_filename = filename.split("/")[-1]
 
-    # Extract location from traceback
-    filename = "unknown"
-    lineno = 0
-
-    tb = exception.__traceback__
-    if tb is not None:
-        while tb.tb_next is not None:
-            tb = tb.tb_next
-        filename = tb.tb_frame.f_code.co_filename.split("/")[-1]
-        lineno = tb.tb_lineno
-
-    return f"[Splat] {exc_type} in {filename}:{lineno}"
+    return f"[Splat] {exc_type} in {short_filename}:{lineno}"
 
 
 def format_issue_body(
@@ -79,20 +89,7 @@ def format_issue_body(
     """
     exc_type = type(exception).__name__
     exc_msg = str(exception)
-
-    # Extract location from traceback
-    filename = "unknown"
-    lineno = 0
-    funcname = "unknown"
-
-    tb = exception.__traceback__
-    if tb is not None:
-        while tb.tb_next is not None:
-            tb = tb.tb_next
-        frame = tb.tb_frame
-        filename = frame.f_code.co_filename
-        lineno = tb.tb_lineno
-        funcname = frame.f_code.co_name
+    filename, lineno, funcname = _extract_traceback_info(exception)
 
     # Format traceback
     tb_str = "".join(

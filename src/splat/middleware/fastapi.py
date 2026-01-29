@@ -47,10 +47,7 @@ class SplatMiddleware:
         async def call_next(req: Request) -> Any:
             await self.app(scope, receive, send)
 
-        try:
-            await self.dispatch(request, call_next)
-        except Exception:
-            raise
+        await self.dispatch(request, call_next)
 
     async def dispatch(
         self,

@@ -10,7 +10,7 @@ import subprocess
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Tuple
+from typing import Any
 
 import click
 import questionary
@@ -33,8 +33,6 @@ CUSTOM_STYLE = Style(
 
 class UserCancelledError(Exception):
     """Raised when user cancels the wizard with Ctrl+C."""
-
-    pass
 
 
 def ask(question: questionary.Question) -> Any:
@@ -103,7 +101,7 @@ def detect_project_type(base_path: Path) -> str:
     return "unknown"
 
 
-def detect_framework(base_path: Path) -> Tuple[str | None, Path | None]:
+def detect_framework(base_path: Path) -> tuple[str | None, Path | None]:
     """Detect the web framework in use.
 
     Note: This returns only the first detected framework file.
